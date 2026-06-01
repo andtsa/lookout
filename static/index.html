@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vgraphtree</title>
+  <link rel="stylesheet" href="/style.css">
+  <!-- highlight.js for code panel syntax highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+
+<svg id="canvas" tabindex="0"></svg>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="lod-indicator">k=0.00</div>
+  <div id="mode-indicator"></div>
+  <div id="dirty-indicator"></div>
+  <div style="color:#444;margin-top:4px">
+    Scroll over node: expand/collapse · Scroll: zoom · +/−: zoom · Shift+drag: pin · Dbl-click: rename · Click edge: annotate · Ctrl+S: save · G: ghost/container
+  </div>
+</div>
+
+<!-- Code panel -->
+<div id="code-panel">
+  <div id="code-panel-resize"></div>
+  <div id="code-panel-header">
+    <button id="code-panel-back" hidden>↩</button>
+    <span id="code-panel-path"></span>
+    <button id="code-panel-close">✕</button>
+  </div>
+  <div id="code-panel-content"></div>
+</div>
+
+<!-- Fixed rename / annotate box -->
+<div id="rename-box" hidden>
+  <span id="rename-box-label"></span>
+  <input id="rename-box-input" placeholder="…">
+</div>
+
+<!-- Context menu -->
+<div id="context-menu">
+  <div class="context-menu-item" id="ctx-open-source">Open source</div>
+  <div class="context-menu-item" id="ctx-unpin">Unpin</div>
+</div>
+
+<!-- D3 from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<!-- highlight.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/rust.min.js"></script>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

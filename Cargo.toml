@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "vgraphtree-server"
+]
+resolver = "2"

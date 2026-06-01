@@ -1,0 +1,493 @@
+:root {
+  --bg-base:        #0a0a1e;
+  --bg-surface:     #06112e;
+  --bg-deep:        #0f2430;
+  --bg-panel:       #0d0d1a;
+  --border-dim:     #333;
+  --border-subtle:  #222;
+  --accent:         #4a9eff;
+  --accent-light:   #80bfff;
+  --accent-muted:   rgba(74, 158, 255, 0.15);
+  --accent-border:  rgba(74, 158, 255, 0.3);
+  --accent-hover:   rgba(74, 158, 255, 0.28);
+  --teal:           #7ec8e3;
+  --gold:           #ffd700;
+  --text-primary:   #e0e0e0;
+  --text-secondary: #b0c4de;
+  --text-dim:       #888;
+  --text-faint:     #666;
+  --text-muted:     #555;
+  --text-dir:       #c8c8c8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: monospace;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#canvas {
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+  outline: none; /* suppress focus ring — keyboard focus is invisible by design */
+}
+
+#canvas:active {
+  cursor: grabbing;
+}
+
+/* Nodes */
+.node .node-rect {
+  fill: var(--bg-surface);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  rx: 6;
+  ry: 6;
+}
+
+/* Ghost mode: parent nodes become dim dashed placeholders */
+.node.node-ghost .node-rect {
+  fill: transparent;
+  stroke-dasharray: 4 3;
+  opacity: 0.28;
+}
+.node.node-ghost text {
+  opacity: 0.28;
+}
+
+/* Container mode: dynamic bounding box around children */
+.container-rect {
+  display: none;
+  fill: color-mix(in srgb, var(--accent) 4%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1px;
+  stroke-dasharray: 6 4;
+  opacity: 0.65;
+}
+.node.node-container .node-rect {
+  display: none;
+}
+.node.node-container .container-rect {
+  display: block;
+}
+.node.node-container text {
+  font-size: 10px;
+  fill: var(--text-muted);
+}
+
+.node.level-1 .node-rect {
+  fill: var(--bg-deep);
+  stroke: var(--teal);
+  stroke-width: 1px;
+}
+
+.node text {
+  fill: var(--text-primary);
+  font-size: 13px;
+  font-family: monospace;
+  pointer-events: none;
+  user-select: none;
+}
+
+.node.level-1 text {
+  font-size: 11px;
+  fill: var(--text-secondary);
+}
+
+.node:hover .node-rect {
+  stroke: var(--accent-light);
+  stroke-width: 2px;
+}
+
+.node.pinned .node-rect {
+  stroke: var(--gold);
+}
+
+/* Edges */
+.edge-visual {
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.edge {
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  fill: none;
+  opacity: 0.6;
+}
+
+.edge-annotation {
+  fill: var(--text-dim);
+  font-size: 10px;
+  font-family: monospace;
+  pointer-events: none;
+}
+
+/* Editing */
+.node-edit-input {
+  background: var(--bg-deep);
+  border: 1px solid var(--accent);
+  color: var(--text-primary);
+  font-family: monospace;
+  font-size: 13px;
+  padding: 2px 4px;
+  outline: none;
+  width: 100%;
+}
+
+.edge-annotation-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--teal);
+  color: var(--text-primary);
+  font-family: monospace;
+  font-size: 10px;
+  padding: 2px 4px;
+  outline: none;
+}
+
+/* HUD */
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+  pointer-events: none;
+  user-select: none;
+}
+
+#lod-indicator {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+#mode-indicator {
+  color: var(--accent);
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+
+#dirty-indicator {
+  color: var(--gold);
+}
+
+/* Code panel */
+#code-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  min-width: 220px;
+  max-width: 90vw;
+  height: 100vh;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-dim);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  z-index: 100;
+}
+
+#code-panel.open {
+  transform: translateX(0);
+}
+
+/* Resize handle — left edge drag strip */
+#code-panel-resize {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+}
+#code-panel-resize:hover,
+#code-panel-resize.dragging {
+  background: var(--accent);
+  opacity: 0.35;
+}
+
+#code-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--border-dim);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+#code-panel-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+#code-panel-back {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+#code-panel-back:hover { color: var(--accent-light); }
+
+#code-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+#code-panel-close:hover {
+  color: var(--text-primary);
+}
+
+#code-panel-content {
+  overflow: auto;
+  flex: 1;
+  padding: 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-dim) transparent;
+}
+
+#code-panel-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+#code-panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+#code-panel-content::-webkit-scrollbar-thumb {
+  background: var(--border-dim);
+  border-radius: 3px;
+}
+#code-panel-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+#code-panel pre {
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0 12px;
+}
+
+/* Scrollbar for directory entries list */
+.dir-entries {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-dim) transparent;
+}
+.dir-entries::-webkit-scrollbar { width: 4px; }
+.dir-entries::-webkit-scrollbar-track { background: transparent; }
+.dir-entries::-webkit-scrollbar-thumb {
+  background: var(--border-dim);
+  border-radius: 2px;
+}
+.dir-entries::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Directory listing ───────────────────────────────────────────────────── */
+
+.dir-listing {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Breadcrumb bar */
+.dir-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.dir-nav-sep {
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.dir-nav-part {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 0;
+  line-height: 1;
+}
+.dir-nav-part:hover { color: var(--accent-light); text-decoration: underline; }
+.dir-nav-part:last-child { color: var(--text-dim); cursor: default; text-decoration: none; }
+
+/* Entry rows */
+.dir-entries {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dir-entry {
+  display: flex;
+  align-items: center;
+  padding: 5px 12px;
+  cursor: pointer;
+  gap: 8px;
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-dir);
+  border-bottom: 1px solid transparent;
+  transition: background 0.08s;
+}
+.dir-entry:hover {
+  background: color-mix(in srgb, var(--bg-surface) 60%, var(--bg-base));
+  border-bottom-color: var(--border-subtle);
+}
+
+.dir-entry-icon {
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.dir-entry-dir .dir-entry-icon  { color: var(--gold); }
+.dir-entry-file .dir-entry-icon { color: var(--accent); }
+
+.dir-entry-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dir-entry-dir .dir-entry-name  { color: var(--gold); }
+.dir-entry-file .dir-entry-name { color: var(--text-primary); }
+
+.dir-node-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border: 1px solid var(--accent-border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.dir-node-badge:hover {
+  background: var(--accent-hover);
+  color: var(--accent-light);
+}
+
+/* Directory stats footer */
+.dir-footer {
+  padding: 5px 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+/* LOD-target hover — gold border shows which node scroll will expand/collapse */
+.node.node-lod-target .node-rect,
+.node.node-lod-target .container-rect {
+  stroke: var(--gold);
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.35));
+}
+
+/* Leaf hover — muted border signals "no expansion here" */
+.node.node-leaf-hover .node-rect {
+  stroke: var(--text-muted);
+  stroke-width: 1.5px;
+  filter: none;
+}
+
+/* Leaf flash — brief red pulse when scroll is attempted on a leaf */
+@keyframes leafFlash {
+  0%, 100% { stroke: var(--text-muted); }
+  50%       { stroke: #e05555 }
+}
+.node.node-leaf-flash .node-rect {
+  animation: leafFlash 0.5s ease-in-out;
+}
+
+/* Node flash-highlight on zoom-to */
+@keyframes nodeFlash {
+  0%   { filter: brightness(3) drop-shadow(0 0 6px var(--accent)); }
+  100% { filter: none; }
+}
+.node-flash rect {
+  animation: nodeFlash 1.2s ease-out forwards;
+}
+
+/* Edge click target (wider invisible stroke) */
+.edge-hitarea {
+  stroke: transparent;
+  stroke-width: 12px;
+  fill: none;
+  cursor: pointer;
+}
+
+/* Context menu */
+#context-menu {
+  position: fixed;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 0;
+  z-index: 200;
+  min-width: 120px;
+  display: none;
+}
+
+#context-menu.visible {
+  display: block;
+}
+
+.context-menu-item {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: monospace;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.context-menu-item:hover {
+  background: var(--bg-deep);
+}

@@ -1,0 +1,166 @@
+project:
+  root: "."
+  lsp:
+    rust: "rust-analyzer"
+  snap_levels: [1.4, 2.0, 2.5, 4.0]
+  depth_ceiling: 2
+
+nodes:
+  backend:
+    label: "Rust backend"
+    level: 0
+    source: "vgraphtree-server/"
+    origin: manual
+    pin: { x: 350, y: 300 }
+    children:
+      server_entry:
+        label: "Server entry"
+        level: 1
+        source: "vgraphtree-server/src/main.rs"
+        origin: manual
+        children: {}
+      graph_types:
+        label: "Graph types"
+        level: 1
+        source: "vgraphtree-server/src/graph.rs"
+        origin: manual
+        children: {}
+      config_parser:
+        label: "Config parser"
+        level: 1
+        source: "vgraphtree-server/src/config.rs"
+        origin: manual
+        children: {}
+      route_handlers:
+        label: "Route handlers"
+        level: 1
+        source: "vgraphtree-server/src/routes/"
+        origin: manual
+        children: 
+          edge:
+            label: "Edge"
+            level: 2
+            source: "vgraphtree-server/src/routes/edge.rs"
+            origin: manual
+            children: {}
+          file:
+            label: "File"
+            level: 2
+            source: "vgraphtree-server/src/routes/file.rs"
+            origin: manual
+            children: {}
+          graph:
+            label: "Graph"
+            level: 2
+            source: "vgraphtree-server/src/routes/graph.rs"
+            origin: manual
+            children: {}
+          node:
+            label: "Node"
+            level: 2
+            source: "vgraphtree-server/src/routes/node.rs"
+            origin: manual
+            children: {}
+          save:
+            label: "Save"
+            level: 2
+            source: "vgraphtree-server/src/routes/save.rs"
+            origin: manual
+            children: {}
+
+  frontend:
+    label: "Web frontend"
+    level: 0
+    source: "static/"
+    origin: manual
+    pin: { x: 900, y: 300 }
+    children:
+      canvas_app:
+        label: "Canvas & LOD"
+        level: 1
+        source: "static/app.js"
+        origin: manual
+        children: {}
+      api_client:
+        label: "API client"
+        level: 1
+        source: "static/api.js"
+        origin: manual
+        children: {}
+      html_entry:
+        label: "HTML entry"
+        level: 1
+        source: "static/index.html"
+        origin: manual
+        children: {}
+      stylesheet:
+        label: "Stylesheet"
+        level: 1
+        source: "static/style.css"
+        origin: manual
+        children: {}
+
+  yaml_store:
+    label: "YAML store"
+    level: 0
+    source: "vgraphtree.yaml"
+    origin: manual
+    pin: { x: 625, y: 520 }
+    children: {}
+
+edges:
+  - id: frontend_to_backend
+    from: frontend
+    to: backend
+    annotation: "HTTP fetch API"
+    levels: [0, 1]
+    origin: manual
+
+  - id: backend_to_yaml
+    from: backend
+    to: yaml_store
+    annotation: "atomic read/write"
+    levels: [0, 1]
+    origin: manual
+
+  - id: canvas_to_api
+    from: canvas_app
+    to: api_client
+    annotation: "fetch wrappers"
+    levels: [1]
+    origin: manual
+
+  - id: server_to_types
+    from: server_entry
+    to: graph_types
+    annotation: "owns NodeGraph"
+    levels: [1]
+    origin: manual
+
+  - id: server_to_config
+    from: server_entry
+    to: config_parser
+    annotation: "parse on startup"
+    levels: [1]
+    origin: manual
+
+  - id: server_to_routes
+    from: server_entry
+    to: route_handlers
+    annotation: "registers handlers"
+    levels: [1]
+    origin: manual
+
+  - id: config_to_types
+    from: config_parser
+    to: graph_types
+    annotation: "produces NodeGraph"
+    levels: [1]
+    origin: manual
+
+  - id: routes_to_types
+    from: route_handlers
+    to: graph_types
+    annotation: "mutates graph"
+    levels: [1]
+    origin: manual
