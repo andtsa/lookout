@@ -1,3 +1,6 @@
+use crate::graph::{Node, Position, Zone};
+use crate::kinds::NodeKind;
+use crate::AppState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -5,21 +8,30 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
-use crate::graph::{Node, Origin, Position, Zone};
-use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct PatchNode {
     pub label: Option<String>,
-    pub pin: Option<serde_json::Value>, // null = unpin, {x,y} = pin
+    /// absent = no change · `null` = unpin · `{x,y}` = pin. `double_option`
+    /// distinguishes an explicit null from an absent field — a plain
+    /// `Option<Option<_>>` collapses both to `None`.
+    #[serde(default, deserialize_with = "double_option")]
+    pub pin: Option<Option<Position>>,
     pub zone: Option<Zone>,
+}
+
+fn double_option<'de, D, T>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Ok(Some(Option::deserialize(de)?))
 }
 
 #[derive(Deserialize)]
 pub struct CreateNode {
     pub id: String,
     pub label: String,
-    pub level: u32,
     pub parent: Option<String>,
     pub source: Option<String>,
 }
@@ -32,26 +44,33 @@ pub async fn patch_node(
     let mut graph = state.graph.lock().unwrap();
 
     let node = graph.nodes.get_mut(&id).ok_or(StatusCode::NOT_FOUND)?;
+    // Nested (included) nodes are content-read-only, but their POSITION is
+    // outer-owned (persisted to the state file) — so pins are allowed, not labels/zones.
+    if node.nested && (body.label.is_some() || body.zone.is_some()) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Position changes go to the state file only; label/zone are intent content.
+    let mut intent_changed = false;
 
     if let Some(label) = body.label {
         node.label = label;
+        node.label_overridden = true; // an explicit label is a human override
+        intent_changed = true;
     }
 
-    if let Some(pin_val) = body.pin {
-        if pin_val.is_null() {
-            node.pin = None;
-        } else {
-            let pos: Position = serde_json::from_value(pin_val).map_err(|_| StatusCode::BAD_REQUEST)?;
-            node.pin = Some(pos);
-        }
+    if let Some(new_pin) = body.pin {
+        node.pin = new_pin; // Some(pos) = pin here, None = unpin
     }
 
     if let Some(zone) = body.zone {
         node.zone = Some(zone);
+        intent_changed = true;
     }
 
     node.dirty = true;
     graph.dirty = true;
+    graph.intent_dirty |= intent_changed;
 
     Ok(Json(json!({ "ok": true })))
 }
@@ -66,23 +85,34 @@ pub async fn create_node(
         return Err(StatusCode::CONFLICT);
     }
 
-    // Validate parent exists if provided
-    if let Some(ref parent_id) = body.parent {
-        if !graph.nodes.contains_key(parent_id) {
-            return Err(StatusCode::BAD_REQUEST);
+    // Validate parent exists if provided; derive level from parent depth.
+    let level = if let Some(ref parent_id) = body.parent {
+        match graph.nodes.get(parent_id) {
+            Some(parent) => parent.level + 1,
+            None => return Err(StatusCode::BAD_REQUEST),
         }
-    }
+    } else {
+        0
+    };
 
     let node = Node {
         id: body.id.clone(),
         label: body.label,
-        level: body.level,
+        level,
+        kind: NodeKind::infer(body.source.as_deref()),
         parent: body.parent.clone(),
         source: body.source,
-        origin: Origin::Manual,
-        pin: None,
         zone: None,
+        pin: None,
+        intent_pin: None,
+        pin_from_state: false,
         children: Vec::new(),
+        derive_children: false,
+        derived: false,
+        nested: false,
+        include: None,
+        source_missing: false,
+        label_overridden: true, // created with an explicit label
         dirty: false,
     };
 
@@ -95,6 +125,7 @@ pub async fn create_node(
 
     graph.nodes.insert(body.id.clone(), node);
     graph.dirty = true;
+    graph.intent_dirty = true; // structural change → rewrite intent
 
     Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
 }
@@ -106,6 +137,9 @@ pub async fn delete_node(
     let mut graph = state.graph.lock().unwrap();
 
     let node = graph.nodes.get(&id).ok_or(StatusCode::NOT_FOUND)?.clone();
+    if node.nested {
+        return Err(StatusCode::FORBIDDEN); // nested (included) content is read-only
+    }
 
     // Remove from parent's children list
     if let Some(parent_id) = &node.parent {
@@ -123,13 +157,15 @@ pub async fn delete_node(
     // Split borrow: collect children to remove, then do it
     let mut to_remove = children;
     while let Some(child_id) = to_remove.pop() {
-        graph.edges.retain(|_, e| e.from != child_id && e.to != child_id);
+        graph
+            .edges
+            .retain(|_, e| e.from != child_id && e.to != child_id);
         if let Some(child_node) = graph.nodes.remove(&child_id) {
             to_remove.extend(child_node.children);
         }
     }
 
     graph.dirty = true;
+    graph.intent_dirty = true; // structural change → rewrite intent
     Ok(Json(json!({ "ok": true })))
 }
-

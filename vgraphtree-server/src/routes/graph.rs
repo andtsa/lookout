@@ -1,6 +1,6 @@
+use crate::AppState;
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::{json, Value};
-use crate::AppState;
 
 pub async fn get_graph(State(state): State<AppState>) -> Result<Json<Value>, StatusCode> {
     let graph = state.graph.lock().unwrap();

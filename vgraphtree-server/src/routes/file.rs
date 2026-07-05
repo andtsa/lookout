@@ -1,3 +1,4 @@
+use crate::AppState;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -6,7 +7,6 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::Path;
-use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct FileQuery {
@@ -24,9 +24,8 @@ pub async fn get_file(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let project = state.project.lock().unwrap();
-    let root = project.root.clone();
-    drop(project);
+    // Resolved root (config-dir-relative) so lookups work from any cwd.
+    let root = state.resolved_root.as_ref().clone();
 
     let full_path = root.join(&params.path);
 
@@ -48,7 +47,9 @@ fn read_file(
     let start = start.unwrap_or(1).saturating_sub(1);
     let end = end.unwrap_or(total).min(total);
     let lines: Vec<&str> = all_lines[start..end].to_vec();
-    Ok(Json(json!({ "type": "file", "lines": lines, "total": total })))
+    Ok(Json(
+        json!({ "type": "file", "lines": lines, "total": total }),
+    ))
 }
 
 fn list_directory(

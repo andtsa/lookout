@@ -1,3 +1,6 @@
+use crate::graph::Edge;
+use crate::kinds::EdgeKind;
+use crate::AppState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -5,13 +8,10 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
-use crate::graph::{Edge, Origin};
-use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct PatchEdge {
     pub annotation: Option<String>,
-    pub levels: Option<Vec<u32>>,
 }
 
 #[derive(Deserialize)]
@@ -20,7 +20,6 @@ pub struct CreateEdge {
     pub from: String,
     pub to: String,
     pub annotation: Option<String>,
-    pub levels: Option<Vec<u32>>,
 }
 
 pub async fn patch_edge(
@@ -30,17 +29,24 @@ pub async fn patch_edge(
 ) -> Result<Json<Value>, StatusCode> {
     let mut graph = state.graph.lock().unwrap();
 
+    // A nested edge (either endpoint from an included config) is read-only.
+    let (from, to) = {
+        let edge = graph.edges.get(&id).ok_or(StatusCode::NOT_FOUND)?;
+        (edge.from.clone(), edge.to.clone())
+    };
+    let nested = |nid: &str| graph.nodes.get(nid).map(|n| n.nested).unwrap_or(false);
+    if nested(&from) || nested(&to) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     let edge = graph.edges.get_mut(&id).ok_or(StatusCode::NOT_FOUND)?;
 
     if let Some(annotation) = body.annotation {
         edge.annotation = Some(annotation);
     }
 
-    if let Some(levels) = body.levels {
-        edge.levels = levels;
-    }
-
     graph.dirty = true;
+    graph.intent_dirty = true; // annotation is intent content
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -63,12 +69,13 @@ pub async fn create_edge(
         from: body.from,
         to: body.to,
         annotation: body.annotation,
-        levels: body.levels.unwrap_or_else(|| vec![0]),
-        origin: Origin::Manual,
+        kind: EdgeKind::Semantic,
+        id_derived: false, // an explicit id was supplied
     };
 
     graph.edges.insert(body.id, edge);
     graph.dirty = true;
+    graph.intent_dirty = true; // structural change → rewrite intent
 
     Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
 }

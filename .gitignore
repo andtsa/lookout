@@ -2,3 +2,5 @@ draft/
 target/
 .DS_Store
 .claude/
+.vgraphtree/
+vgraphtree.state.yaml
