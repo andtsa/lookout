@@ -9,6 +9,8 @@
 // cycles and drag the whole dependency web in here). Instead each `run` receives
 // a `cx` context object of small action callbacks, wired up once in app.js.
 
+import { debugMode } from './state.js';
+
 // ─── Keyboard shortcuts ────────────────────────────────────────────────────────
 // Each entry:
 //   combo       display string for the help bar
@@ -55,9 +57,9 @@ export const KEY_BINDINGS = [
     run: (e, cx) => cx.toggleEngine(),
   },
   {
-    combo: 'K', desc: 'cola layering',
+    combo: 'K', desc: 'cola mode (layered/radial/stress)',
     match: e => (e.key === 'k' || e.key === 'K') && !e.ctrlKey && !e.metaKey && !e.altKey,
-    run: (e, cx) => cx.toggleLayering(),
+    run: (e, cx) => cx.cycleColaMode(),
   },
 ];
 
@@ -79,6 +81,32 @@ export const POINTER_HINTS = [
 // Attaches the global keydown listener. cx is the context object of action
 // callbacks (see app.js). The first binding whose match() passes wins.
 export function setupKeybindings(cx) {
+  // Debug logger — capture phase on window, so it fires before every other
+  // handler (and before any stopPropagation), recording every key the page
+  // actually receives. Only active while debug mode is on (D key, or vgtDebug()
+  // from the console if the keyboard itself isn't cooperating).
+  //
+  // Reading the output:
+  //   • press keys and see NOTHING → the events aren't reaching the page at all
+  //     (browser extension eating them, focus in another window/iframe, or an
+  //     OS-level grab). The bug is outside this app.
+  //   • a line logs but the action doesn't happen → check `matched` (no binding)
+  //     and `blockedByInput` (a text field has focus and swallowed it).
+  window.addEventListener('keydown', e => {
+    if (!debugMode) return;
+    const inInput = document.activeElement.tagName === 'INPUT';
+    const b = KEY_BINDINGS.find(bb => bb.match(e));
+    const mods = ['ctrl', 'meta', 'alt', 'shift'].filter(m => e[m + 'Key']).join('+') || 'none';
+    const ae = document.activeElement;
+    console.log('[keydown]', {
+      key: e.key, code: e.code, mods, repeat: e.repeat,
+      focus: (ae?.tagName || '?').toLowerCase() + (ae?.id ? '#' + ae.id : ''),
+      matched: b ? b.combo : '(none)',
+      blockedByInput: !!(inInput && b && !b.whileTyping),
+      defaultPrevented: e.defaultPrevented,
+    });
+  }, true);
+
   document.addEventListener('keydown', e => {
     const inInput = document.activeElement.tagName === 'INPUT';
     for (const b of KEY_BINDINGS) {

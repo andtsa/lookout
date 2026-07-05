@@ -18,9 +18,11 @@ export const scrollAccum   = {};   // nodeId → accumulated wheel deltaY
 // Toggled at runtime; refreshVisibility dispatches the (re)layout accordingly.
 export let layoutEngine    = 'force';
 export function setLayoutEngine(v) { layoutEngine = v; }
-// Whether the Cola engine enforces directed top-down layering (flowLayout).
-export let colaLayered     = true;
-export function setColaLayered(v)  { colaLayered = v; }
+// Cola layout mode: 'layered' (top-down flow), 'radial' (center → outward), or
+// 'stress' (no directional flow). Cycled by the layering keybinding.
+export let colaMode        = 'layered';
+export function setColaMode(v)     { colaMode = v; }
+export const COLA_MODES    = ['layered', 'radial', 'stress'];
 
 // Focused node IDs — mutated in-place so all importers share the same Set.
 // Edges are always dim unless at least one endpoint is focused, EXCEPT when

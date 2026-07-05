@@ -9,7 +9,7 @@ import {
   setNodes, setEdges, setSourceToNode, getDirty, setDirty,
   setParentDisplayMode, parentDisplayMode, clearFocus,
   setDebugMode, debugMode,
-  layoutEngine, setLayoutEngine, colaLayered, setColaLayered,
+  layoutEngine, setLayoutEngine, colaMode, setColaMode, COLA_MODES,
 } from './state.js';
 import { renderDebug, clearDebug } from './debug.js';
 import { NESTED_SCALE, FOCUS_REHEAT_ALPHA } from './constants.js';
@@ -62,7 +62,7 @@ export function refreshVisibility(alpha = 1) {
   updateFocusHighlights();
   // Dispatch to the active layout engine. Both write positions to the shared
   // node objects, so the rest of the refresh is engine-agnostic.
-  if (layoutEngine === 'cola') runColaLayout(alpha, { layered: colaLayered });
+  if (layoutEngine === 'cola') runColaLayout(alpha, { mode: colaMode });
   else buildSimulation(alpha);
   updateModeIndicator();
   updateEngineIndicator();
@@ -74,7 +74,7 @@ function updateEngineIndicator() {
   const el = document.getElementById('engine-indicator');
   if (!el) return;
   el.textContent = layoutEngine === 'cola'
-    ? `engine: cola (${colaLayered ? 'layered' : 'stress'})`
+    ? `engine: cola (${colaMode})`
     : 'engine: force';
 }
 
@@ -104,13 +104,22 @@ const keyContext = {
     setLayoutEngine(layoutEngine === 'cola' ? 'force' : 'cola');
     refreshVisibility(1);
   },
-  // Toggle Cola's directed layering; only meaningful (and only relayouts) when cola is active.
-  toggleLayering: () => {
-    setColaLayered(!colaLayered);
+  // Cycle Cola's layout mode (layered → radial → stress); only relayouts when cola is active.
+  cycleColaMode: () => {
+    setColaMode(COLA_MODES[(COLA_MODES.indexOf(colaMode) + 1) % COLA_MODES.length]);
     if (layoutEngine === 'cola') refreshVisibility(1); else updateEngineIndicator();
   },
 };
 setupKeybindings(keyContext);
+
+// Console fallback for toggling debug mode without the keyboard — handy when the
+// reason you want the key logger is that key presses aren't registering. Run
+// `vgtDebug()` (or `vgtDebug(false)`) in the devtools console.
+window.vgtDebug = (on = true) => {
+  setDebugMode(on);
+  if (on) renderDebug(); else clearDebug();
+  console.log('[vgtDebug] debug mode', on ? 'ON — keydown logging active' : 'off');
+};
 
 // ─── Nested map placement ───────────────────────────────────────────────────
 // Nested (included) nodes carry their inner map's absolute pins. Recenter each
