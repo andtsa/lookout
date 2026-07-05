@@ -51,6 +51,13 @@ Dragging a node without Shift is temporary — the node returns to simulation on
 
 ### 2.5 Config growth control
 
+> **⚠ Reworked by [`config-architecture.md`](config-architecture.md).** The
+> goal-state model keeps these mechanisms but reinterprets them: `depth_ceiling`
+> becomes the auto-derivation cap *below* the seam (D27), the authored/derived
+> boundary is per-branch and implicit, `origin` is dropped in favour of
+> file-location provenance (D22), and `vgraphtree check` becomes a core
+> server-side staleness loop rather than a future CLI.
+
 Four mechanisms prevent the config file from becoming unmanageable:
 
 1. **`depth_ceiling`**: Only nodes up to a configured depth level are written to config. Deeper nodes (individual functions, lines) are always derived from LSP at runtime. Configurable per project.
@@ -86,6 +93,11 @@ The app runs as a local HTTP server (default port `7777`). The browser opens `in
 
 ## 4. What Belongs in Config vs What Doesn't
 
+> **⚠ Superseded by [`config-architecture.md`](config-architecture.md).** This
+> section describes the Phase-1 single-file prototype schema. The goal-state
+> config splits into three files (intent / state / cache) and drops the
+> `level`, `origin`, and edge `levels` fields. Kept here as prototype history.
+
 ### Belongs in YAML config
 
 - Manually named high-level and mid-level nodes (id, label, level, parent)
@@ -109,6 +121,12 @@ The app runs as a local HTTP server (default port `7777`). The browser opens `in
 ---
 
 ## 5. YAML Config Schema
+
+> **⚠ Superseded by [`config-architecture.md`](config-architecture.md) §3.** The
+> goal-state intent schema removes `level` (derived from nesting depth),
+> `origin` (replaced by file-location provenance), `pin` (moved to the state
+> file), edge `levels` (edges are pure morphing), and adds `kind` /
+> `derive_children`. The block below is the prototype schema.
 
 ```yaml
 # vgraphtree.yaml — only manually authored / confirmed content
@@ -184,6 +202,11 @@ edges:
 ---
 
 ## 6. Rust Data Structures
+
+> **⚠ Superseded by [`config-architecture.md`](config-architecture.md) §10.** The
+> goal-state model separates on-disk intent/state types from the resolved
+> runtime `Node`, drops `level`/`origin` as stored fields, and adds `NodeKind`
+> plus `EdgeKind::Custom`. The block below is the prototype's flat model.
 
 ```rust
 // Core graph types (in-memory, rebuilt from YAML on startup)
