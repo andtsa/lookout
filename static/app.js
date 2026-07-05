@@ -21,6 +21,7 @@ import {
   updateLodIndicator, updateModeIndicator, updateFocusHighlights,
 } from './render.js';
 import { setupNodeInteractions, setupEdgeInteractions } from './interaction.js';
+import { setupKeybindings, renderHelpBar } from './keybindings.js';
 import { normaliseSource } from './code-panel.js';
 
 // ─── Visibility refresh ───────────────────────────────────────────────────────
@@ -63,56 +64,28 @@ export function refreshVisibility(alpha = 1) {
 }
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+// All bindings and their help text live in keybindings.js. Here we only supply
+// the actions they invoke (the context object), then hand off to the dispatcher.
 
-document.addEventListener('keydown', async e => {
-  const inInput = document.activeElement.tagName === 'INPUT';
-
-  // Ctrl/Cmd+S: save — works even when an input is focused
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-    e.preventDefault();
-    if (!getDirty()) return;
-    await postSave();
-    setDirty(false);
-    return;
-  }
-
-  // Escape: clear all focused nodes (while input is open, let the browser handle it)
-  if (e.key === 'Escape' && !inInput) {
-    if (clearFocus()) refreshVisibility(FOCUS_REHEAT_ALPHA);
-    return;
-  }
-
-  if (inInput) return;
-
-  // G: toggle ghost / container mode
-  if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+const keyContext = {
+  getDirty,
+  save: async () => { await postSave(); setDirty(false); },
+  clearFocus: () => { if (clearFocus()) refreshVisibility(FOCUS_REHEAT_ALPHA); },
+  toggleDisplayMode: () => {
     setParentDisplayMode(parentDisplayMode === 'ghost' ? 'container' : 'ghost');
     updateContainers();
     updateModeIndicator();
-  }
-
-  // D: toggle the force-debug overlay (draw once now — a settled sim won't tick)
-  if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+  },
+  // Toggle the force-debug overlay (draw once now — a settled sim won't tick).
+  toggleDebug: () => {
     setDebugMode(!debugMode);
     if (debugMode) renderDebug(); else clearDebug();
-  }
-
-  // +/= zoom in   −/_ zoom out
-  if ((e.key === '+' || e.key === '=') && !e.ctrlKey && !e.metaKey)
-    svg.transition().duration(250).call(zoom.scaleBy, 1.3);
-  if (e.key === '-' && !e.ctrlKey && !e.metaKey)
-    svg.transition().duration(250).call(zoom.scaleBy, 1 / 1.3);
-
-  // E / C: global expand / collapse one frontier level
-  // Guard: allow AltGr (Ctrl+Alt on Windows) but block plain Ctrl/Cmd combos.
-  const bracketGuard = !e.metaKey && !(e.ctrlKey && !e.altKey);
-  if ((e.key === 'e' || e.key === 'E') && bracketGuard) {
-    if (globalExpand()) refreshVisibility();
-  }
-  if ((e.key === 'c' || e.key === 'C') && bracketGuard) {
-    if (globalCollapse()) refreshVisibility();
-  }
-});
+  },
+  zoomBy: factor => svg.transition().duration(250).call(zoom.scaleBy, factor),
+  expandAll:   () => { if (globalExpand())   refreshVisibility(); },
+  collapseAll: () => { if (globalCollapse()) refreshVisibility(); },
+};
+setupKeybindings(keyContext);
 
 // ─── Nested map placement ───────────────────────────────────────────────────
 // Nested (included) nodes carry their inner map's absolute pins. Recenter each
@@ -199,6 +172,7 @@ async function init() {
   renderNodes();
   renderEdges();
   updateLodIndicator(0);
+  renderHelpBar(document.getElementById('key-hints'));
 
   // Wire up LOD indicator to zoom events (avoids state.js → render.js import)
   zoom.on('zoom.lod', event => updateLodIndicator(event.transform.k));

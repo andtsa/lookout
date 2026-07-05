@@ -10,7 +10,7 @@ import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdge
 import { updateContainers, rerenderEdges } from './render.js';
 import {
   CHARGE_LABEL_FACTOR, CHARGE_CONTAINER_PER_CHILD, CHARGE_CONTAINER_MIN,
-  CHARGE_CONNECTED, CHARGE_ISOLATED, CHARGE_DISTANCE_MAX,
+  CHARGE_PER_EDGE, CHARGE_ISOLATED, CHARGE_DISTANCE_MAX,
   LINK_DIST_PARENT, LINK_DIST_EDGE,
   LINK_STRENGTH_PARENT, LINK_STRENGTH_EDGE, LINK_STRENGTH_UNEXPOSED,
   COLLISION_RADIUS, COLLISION_ITERATIONS, VELOCITY_DECAY, COLLIDE_STRENGTH,
@@ -72,11 +72,16 @@ export function buildSimulation(alpha = 1) {
 
   const allSimNodes = [...simNodes, ...visLabelNodes];
 
-  // Nodes participating in at least one visible edge (semantic or parent-child)
-  const connectedIds = new Set();
+  // Degree per node = number of incident visible SEMANTIC edges (in + out).
+  // Parent-child links are structural, not semantic, so they don't count here —
+  // charge scales with how connected a node is in the graph, not the tree.
+  const degree = new Map();
   for (const lnk of simLinks) {
-    connectedIds.add(typeof lnk.source === 'object' ? lnk.source.id : lnk.source);
-    connectedIds.add(typeof lnk.target === 'object' ? lnk.target.id : lnk.target);
+    if (lnk.type !== 'edge') continue;
+    const s = typeof lnk.source === 'object' ? lnk.source.id : lnk.source;
+    const t = typeof lnk.target === 'object' ? lnk.target.id : lnk.target;
+    degree.set(s, (degree.get(s) || 0) + 1);
+    degree.set(t, (degree.get(t) || 0) + 1);
   }
 
   const { w: vw, h: vh } = getViewportSize();
@@ -100,8 +105,10 @@ export function buildSimulation(alpha = 1) {
           .filter(cid => { const c = nodes[cid]; return c && isNodeVisible(c); }).length;
         return -Math.max(CHARGE_CONTAINER_MIN, kids * CHARGE_CONTAINER_PER_CHILD);
       }
-      if (connectedIds.has(d.id)) return CHARGE_CONNECTED;
-      return CHARGE_ISOLATED;
+      // Repulsion proportional to degree: a hub with many edges clears more
+      // space; a node with no visible edges gets the gentle isolated charge.
+      const deg = degree.get(d.id) || 0;
+      return deg === 0 ? CHARGE_ISOLATED : deg * CHARGE_PER_EDGE;
     }).distanceMax(CHARGE_DISTANCE_MAX))
     .force('link', d3.forceLink(simLinks).id(d => d.id)
       .distance(d => d.type === 'parent' ? LINK_DIST_PARENT : LINK_DIST_EDGE)

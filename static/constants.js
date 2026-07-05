@@ -20,24 +20,28 @@ export const CHARGE_LABEL_FACTOR     = 2;
 //     repelled by every ancestor's charge, compounding and over-inflating deep
 //     containers (e.g. "rust backend" ballooning while flat "web frontend" is fine).
 // Direct-child count is a stable, non-compounding proxy.
-export const CHARGE_CONTAINER_PER_CHILD = 200; // repulsion per direct child
-export const CHARGE_CONTAINER_MIN       = 1500; // floor — keeps tiny containers from being too weak
+export const CHARGE_CONTAINER_PER_CHILD = -200; // repulsion per direct child
+export const CHARGE_CONTAINER_MIN       = -1500; // floor — keeps tiny containers from being too weak
 
 // Leaf / regular nodes. Kept modest — spacing is mostly done by COLLISION now,
 // not long-range charge, to reduce shaking (see CHARGE_DISTANCE_MAX).
-export const CHARGE_CONNECTED        = -500; // node with at least one visible edge
+// A connected node's repulsion scales with its degree (number of incident visible
+// semantic edges, in + out): -degree × CHARGE_PER_EDGE. So hubs clear more space
+// around themselves while leaf nodes stay light. A degree-1 node repels at exactly
+// CHARGE_PER_EDGE.
+export const CHARGE_PER_EDGE         = -2000; // repulsion added per incident visible edge
 export const CHARGE_ISOLATED         = -80;  // node with no visible edges (gentler; it has nowhere to go)
 
 // Cap the range of charge (px). forceManyBody is inverse-square and by default
 // touches every node, so a move anywhere ripples everywhere → global jitter.
 // Limiting the range makes charge a *local* separator; collision does the rest.
-export const CHARGE_DISTANCE_MAX     = 820;
+export const CHARGE_DISTANCE_MAX     = 3920;
 
 // Link force — spring between connected nodes.
 export const LINK_DIST_PARENT        = 1360;  // rest length for parent → child links (px)
 export const LINK_DIST_EDGE          = 1580;  // rest length for semantic edges (px)
-export const LINK_STRENGTH_PARENT    = 0.2;  // spring stiffness for parent → child (0 = loose, 1 = rigid)
-export const LINK_STRENGTH_EDGE      = 0.05; // spring stiffness for exposed semantic edges
+export const LINK_STRENGTH_PARENT    = 0.001;  // spring stiffness for parent → child (0 = loose, 1 = rigid)
+export const LINK_STRENGTH_EDGE      = 0.00; // spring stiffness for exposed semantic edges
 // Unexposed edges (focus active, neither endpoint focused) still pull, but only
 // weakly — enough to keep the graph loosely coherent while the focused subgraph
 // dominates the layout. This is the point of focus mode.
@@ -65,7 +69,7 @@ export const CONTAINER_MARGIN        = 24;
 
 // Centering — weak gravity toward the viewport centre to prevent the graph
 // from drifting off-screen during long sessions.
-export const CENTER_STRENGTH         = 0.015;
+export const CENTER_STRENGTH         = 0.0015;
 
 // Label pull — custom force that moves each phantom label node toward the
 // midpoint of its edge's border endpoints on every simulation tick.
@@ -143,7 +147,7 @@ export const CLICK_DEBOUNCE_MS       = 220;
 // of the visible node count, the graph is considered "sparse" and all edges
 // are exposed automatically — no clicking needed.
 // Set to 1.0 to match the original "edges ≤ nodes" threshold, or 0 to disable.
-export const SPARSE_EDGE_RATIO       = 1.0;
+export const SPARSE_EDGE_RATIO       = 0.5;
 
 // Reheat energy when toggling/clearing focus. Focus is triggered by a deliberate
 // Alt+click and changes which edges pull, so a gentle relayout is wanted (and
