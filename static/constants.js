@@ -67,6 +67,23 @@ export const COLLIDE_STRENGTH        = 0.7;
 // are kept off the perimeter, not just out of the box.
 export const CONTAINER_MARGIN        = 24;
 
+// ─── Cola (WebCola) constraint-layout engine ─────────────────────────────────
+// Alternative layout engine (toggle with the engine keybinding). Constraint /
+// stress based rather than force based: it minimises a stress function subject
+// to non-overlap + (optional) directed-layering constraints, which yields far
+// fewer edge crossings than the force sim. See layout-cola.js.
+export const COLA_NODE_PAD           = 24;  // px added around each box for non-overlap spacing
+export const COLA_LINK_LENGTH        = 90;  // ideal link length fed to jaccardLinkLengths
+export const COLA_LINK_LENGTH_JACCARD = 0.7; // jaccard neighbourhood-overlap weighting (0..1)
+export const COLA_FLOW_GAP           = 60;  // min vertical separation for directed edges (flowLayout)
+// Iteration budget for the synchronous solve: [unconstrained, user-constraint,
+// all-constraint]. More = tidier but slower. The spike hit ~72 crossings at 30/30/60.
+export const COLA_ITERS              = [30, 30, 60];
+// Animation duration (ms) for tweening nodes from old positions to the solved
+// layout after a (re)solve. A full relayout uses the longer end.
+export const COLA_ANIM_MS_FULL       = 550;
+export const COLA_ANIM_MS_GENTLE     = 320;
+
 // Centering — weak gravity toward the viewport centre to prevent the graph
 // from drifting off-screen during long sessions.
 export const CENTER_STRENGTH         = 0.0015;

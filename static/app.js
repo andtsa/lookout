@@ -9,12 +9,14 @@ import {
   setNodes, setEdges, setSourceToNode, getDirty, setDirty,
   setParentDisplayMode, parentDisplayMode, clearFocus,
   setDebugMode, debugMode,
+  layoutEngine, setLayoutEngine, colaLayered, setColaLayered,
 } from './state.js';
 import { renderDebug, clearDebug } from './debug.js';
 import { NESTED_SCALE, FOCUS_REHEAT_ALPHA } from './constants.js';
 import { initialPosition } from './geometry.js';
 import { isNodeVisible, globalExpand, globalCollapse } from './lod.js';
 import { initLabelNodes, buildSimulation, centerGraph, scheduleCenterGraph } from './simulation.js';
+import { runColaLayout } from './layout-cola.js';
 import {
   renderNodes, renderEdges,
   updateContainers, rerenderEdges,
@@ -58,9 +60,22 @@ export function refreshVisibility(alpha = 1) {
   updateContainers();
   rerenderEdges();
   updateFocusHighlights();
-  buildSimulation(alpha);
+  // Dispatch to the active layout engine. Both write positions to the shared
+  // node objects, so the rest of the refresh is engine-agnostic.
+  if (layoutEngine === 'cola') runColaLayout(alpha, { layered: colaLayered });
+  else buildSimulation(alpha);
   updateModeIndicator();
+  updateEngineIndicator();
   updateLodIndicator(d3.zoomTransform(svg.node()).k);
+}
+
+// HUD readout of the active layout engine (and Cola's layering sub-mode).
+function updateEngineIndicator() {
+  const el = document.getElementById('engine-indicator');
+  if (!el) return;
+  el.textContent = layoutEngine === 'cola'
+    ? `engine: cola (${colaLayered ? 'layered' : 'stress'})`
+    : 'engine: force';
 }
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
@@ -84,6 +99,16 @@ const keyContext = {
   zoomBy: factor => svg.transition().duration(250).call(zoom.scaleBy, factor),
   expandAll:   () => { if (globalExpand())   refreshVisibility(); },
   collapseAll: () => { if (globalCollapse()) refreshVisibility(); },
+  // Switch layout engine (force ↔ cola) and relayout.
+  toggleEngine: () => {
+    setLayoutEngine(layoutEngine === 'cola' ? 'force' : 'cola');
+    refreshVisibility(1);
+  },
+  // Toggle Cola's directed layering; only meaningful (and only relayouts) when cola is active.
+  toggleLayering: () => {
+    setColaLayered(!colaLayered);
+    if (layoutEngine === 'cola') refreshVisibility(1); else updateEngineIndicator();
+  },
 };
 setupKeybindings(keyContext);
 
@@ -172,6 +197,7 @@ async function init() {
   renderNodes();
   renderEdges();
   updateLodIndicator(0);
+  updateEngineIndicator();
   renderHelpBar(document.getElementById('key-hints'));
 
   // Wire up LOD indicator to zoom events (avoids state.js → render.js import)

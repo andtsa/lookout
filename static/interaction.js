@@ -57,6 +57,13 @@ function dragged(event, d) {
   d.x  = event.x;
   d.y  = event.y;
 
+  // Render the dragged node immediately. Under d3-force the tick handler would
+  // also do this, but the Cola engine doesn't tick continuously, so a leaf drag
+  // would otherwise not move until the next relayout.
+  nodeLayer.selectAll('.node').filter(n => n.id === d.id)
+    .attr('transform', `translate(${d.x},${d.y})`);
+  rerenderEdges();
+
   // Move the whole expanded cluster together
   if (d.expandedDepth > 0) {
     const desc    = visibleDescendants(d);

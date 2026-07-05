@@ -11,8 +11,16 @@ export let sourceToNode    = {};   // normalised source path → node
 export let selectedEdgeId  = null;
 export let parentDisplayMode = 'container'; // 'ghost' | 'container'
 export let hoveredNodeId   = null;
-export let simulation      = null; // current D3 force simulation
+export let simulation      = null; // current layout controller (D3 force sim, or a Cola shim)
 export const scrollAccum   = {};   // nodeId → accumulated wheel deltaY
+
+// Active layout engine: 'force' (d3-force) or 'cola' (WebCola constraint layout).
+// Toggled at runtime; refreshVisibility dispatches the (re)layout accordingly.
+export let layoutEngine    = 'force';
+export function setLayoutEngine(v) { layoutEngine = v; }
+// Whether the Cola engine enforces directed top-down layering (flowLayout).
+export let colaLayered     = true;
+export function setColaLayered(v)  { colaLayered = v; }
 
 // Focused node IDs — mutated in-place so all importers share the same Set.
 // Edges are always dim unless at least one endpoint is focused, EXCEPT when

@@ -49,6 +49,16 @@ export const KEY_BINDINGS = [
       && !e.metaKey && !(e.ctrlKey && !e.altKey),
     run: (e, cx) => { if (e.key === 'c' || e.key === 'C') cx.collapseAll(); else cx.expandAll(); },
   },
+  {
+    combo: 'L', desc: 'layout engine (force/cola)',
+    match: e => (e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey && !e.altKey,
+    run: (e, cx) => cx.toggleEngine(),
+  },
+  {
+    combo: 'K', desc: 'cola layering',
+    match: e => (e.key === 'k' || e.key === 'K') && !e.ctrlKey && !e.metaKey && !e.altKey,
+    run: (e, cx) => cx.toggleLayering(),
+  },
 ];
 
 // ─── Pointer gestures (documentation only) ─────────────────────────────────────
