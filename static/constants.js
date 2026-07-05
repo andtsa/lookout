@@ -84,6 +84,26 @@ export const COLA_ITERS              = [30, 30, 60];
 export const COLA_ANIM_MS_FULL       = 550;
 export const COLA_ANIM_MS_GENTLE     = 320;
 
+// Edge labels as first-class Cola nodes: each annotated edge gets a dummy node
+// sized to its text and routed source→label→target, so avoidOverlaps keeps
+// labels clear of nodes and of each other. Size = text metrics (approx).
+export const COLA_LABEL_CHAR_W       = 6.2; // px per annotation character (monospace ~11px)
+export const COLA_LABEL_H            = 16;  // label box height (px)
+export const COLA_LABEL_PAD          = 10;  // extra clearance around a label box
+// After solving, each label is snapped onto its edge segment so it reads as
+// belonging to that edge. It's kept within this fraction of the edge centred on
+// the midpoint (0.3 → allowed between 35% and 65% along the edge), at the point
+// nearest where the solver placed it (which spreads crossing labels apart), then
+// nudged this many px perpendicular to the line so the edge doesn't strike
+// through the text.
+export const COLA_LABEL_MID_BAND     = 0.34; // central fraction of the edge a label may sit in
+export const COLA_LABEL_OFFSET       = 30;    // perpendicular offset off the line (px)
+
+// Radial ("center → outward") mode. The layered solve is polar-remapped: layer
+// depth → radius, in-layer position → angle. The fan spans this fraction of a
+// full turn (leaving a gap so the two ends don't collide).
+export const COLA_RADIAL_SPAN        = 0.92; // × 2π
+
 // Centering — weak gravity toward the viewport centre to prevent the graph
 // from drifting off-screen during long sessions.
 export const CENTER_STRENGTH         = 0.0015;

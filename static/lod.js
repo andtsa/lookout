@@ -119,20 +119,20 @@ export function globalCollapse() {
 }
 
 // ─── Focus / edge exposure ────────────────────────────────────────────────────
-// An edge is "exposed" (full opacity, physics-active) when:
-//   • no node is focused (default state — whole graph is live), OR
+// "Focus mode is always on": on a dense graph edges are faded by default and you
+// focus node(s) to reveal their connections. An edge is "exposed" (full opacity,
+// physics-active) when:
+//   • the graph is sparse (few edges) — focusing would be pointless, so show all; OR
 //   • at least one of its endpoints is currently focused.
-// This lets the user focus one or more nodes to see only their connections
-// while the rest of the graph fades to a low-opacity guide.
+// With no node focused on a non-sparse graph, every edge is faded — that is the
+// intended resting state (declutters a dense graph). Focusing reveals a subgraph;
+// Esc clears focus and fades everything back.
 
 export function isEdgeExposed(edge) {
   // Sparse graphs expose everything regardless of focus state.
   if (graphIsSparse) return true;
-  // No node focused → default state, whole graph is live. (Without this,
-  // clearing focus would leave every edge unexposed, so Esc appeared to do
-  // nothing — the graph stayed dimmed instead of returning to full.)
-  if (focusedNodeIds.size === 0) return true;
-  // Otherwise an edge is only exposed when at least one endpoint is focused.
+  // Otherwise an edge is exposed only when at least one endpoint is focused.
+  // (No focus → all faded: the default decluttered state.)
   return focusedNodeIds.has(edge.from) || focusedNodeIds.has(edge.to);
 }
 
