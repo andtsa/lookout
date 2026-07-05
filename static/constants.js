@@ -12,24 +12,56 @@ export const NODE_H_SM = 32;   // level-1+ node height
 // away from real nodes just enough to find a clear gap.
 export const CHARGE_LABEL_FACTOR     = 2;
 
-// Expanded container nodes: repulsion scales with √(w × h) so the force
-// reaches to the container's border regardless of how large it grows.
-export const CHARGE_CONTAINER_SCALE  = 22;   // multiplied by √(w × h)
-export const CHARGE_CONTAINER_MIN    = 3000; // floor — prevents very small containers from being too weak
-export const CHARGE_CONTAINER_FALLBACK = 150; // assumed footprint (px) when containerBounds is not yet available
+// Expanded container nodes: repulsion scales with the number of DIRECT visible
+// children (what the container actually needs to space out), not its rendered
+// size and not its recursive descendant count. Two reasons:
+//   • rendered size fed back into the force → unbounded growth.
+//   • recursive count double-counts nesting — a sub-container's children are
+//     repelled by every ancestor's charge, compounding and over-inflating deep
+//     containers (e.g. "rust backend" ballooning while flat "web frontend" is fine).
+// Direct-child count is a stable, non-compounding proxy.
+export const CHARGE_CONTAINER_PER_CHILD = 200; // repulsion per direct child
+export const CHARGE_CONTAINER_MIN       = 1500; // floor — keeps tiny containers from being too weak
 
-// Leaf / regular nodes.
-export const CHARGE_CONNECTED        = -700; // node with at least one visible edge
-export const CHARGE_ISOLATED         = -70;  // node with no visible edges (gentler; it has nowhere to go)
+// Leaf / regular nodes. Kept modest — spacing is mostly done by COLLISION now,
+// not long-range charge, to reduce shaking (see CHARGE_DISTANCE_MAX).
+export const CHARGE_CONNECTED        = -500; // node with at least one visible edge
+export const CHARGE_ISOLATED         = -80;  // node with no visible edges (gentler; it has nowhere to go)
+
+// Cap the range of charge (px). forceManyBody is inverse-square and by default
+// touches every node, so a move anywhere ripples everywhere → global jitter.
+// Limiting the range makes charge a *local* separator; collision does the rest.
+export const CHARGE_DISTANCE_MAX     = 820;
 
 // Link force — spring between connected nodes.
-export const LINK_DIST_PARENT        = 160;  // rest length for parent → child links (px)
-export const LINK_DIST_EDGE          = 280;  // rest length for semantic edges (px)
-export const LINK_STRENGTH_PARENT    = 0.5;  // spring stiffness for parent → child (0 = loose, 1 = rigid)
-export const LINK_STRENGTH_EDGE      = 0.25; // spring stiffness for semantic edges
+export const LINK_DIST_PARENT        = 1360;  // rest length for parent → child links (px)
+export const LINK_DIST_EDGE          = 1580;  // rest length for semantic edges (px)
+export const LINK_STRENGTH_PARENT    = 0.2;  // spring stiffness for parent → child (0 = loose, 1 = rigid)
+export const LINK_STRENGTH_EDGE      = 0.05; // spring stiffness for exposed semantic edges
+// Unexposed edges (focus active, neither endpoint focused) still pull, but only
+// weakly — enough to keep the graph loosely coherent while the focused subgraph
+// dominates the layout. This is the point of focus mode.
+export const LINK_STRENGTH_UNEXPOSED = 0.01;
 
-// Collision — keeps nodes from overlapping.
-export const COLLISION_RADIUS        = 90;   // exclusion radius for regular nodes (px)
+// Collision — the primary spacing force now. More iterations = firmer, less
+// squishy separation (nodes settle apart instead of oscillating through).
+export const COLLISION_RADIUS        = 135;   // exclusion radius for regular nodes (px)
+export const COLLISION_ITERATIONS    = 3;
+
+// Friction: fraction of velocity *kept* each tick is (1 − velocityDecay). Higher
+// decay = more damping = less ringing/shaking. D3 default 0.4; we run heavier.
+export const VELOCITY_DECAY          = 0.7;
+
+// Grouped collision. Elements collide only within their sibling group (same
+// parent = same LoD): a leaf/collapsed node is a circle of COLLISION_RADIUS, an
+// expanded container is a circle (containerRadius) around its box that represents
+// its whole subtree to the parent group. This is what d3.forceCollide can't do
+// (it's global). Strength = fraction of the overlap resolved per tick (soft, like
+// forceCollide); higher = firmer, riskier to jitter.
+export const COLLIDE_STRENGTH        = 0.7;
+// Extra clearance folded into a container's collision radius, so its neighbours
+// are kept off the perimeter, not just out of the box.
+export const CONTAINER_MARGIN        = 24;
 
 // Centering — weak gravity toward the viewport centre to prevent the graph
 // from drifting off-screen during long sessions.
@@ -37,17 +69,24 @@ export const CENTER_STRENGTH         = 0.015;
 
 // Label pull — custom force that moves each phantom label node toward the
 // midpoint of its edge's border endpoints on every simulation tick.
-// 0 = no pull, 1 = teleport instantly to midpoint.
-export const LABEL_PULL_STRENGTH     = 0.9;
+// 0 = no pull, 1 = teleport instantly to midpoint. Kept gentle — a strong pull
+// adds a big velocity kick every tick and makes labels (and their edges) jitter.
+export const LABEL_PULL_STRENGTH     = 0.35;
 
 // Alpha decay — controls how quickly the simulation cools and stops.
 // D3's default is ~0.0228.  A slightly higher value makes the layout settle
 // faster at the cost of a less thorough search of the energy landscape.
-export const ALPHA_DECAY             = 0.125;
+export const ALPHA_DECAY             = 0.025;
 
 // Zone forces — per-node attraction toward a named screen zone (top, left, …).
 // Applied on top of the global centering force when a node has zone: set.
-export const ZONE_STRENGTH           = 0.08;
+export const ZONE_STRENGTH           = 0.01;
+
+// Children of a pinned parent are pulled toward the parent's pin (in place of the
+// viewport-center gravity), so an expanded container's contents stay clustered on
+// the pin instead of drifting toward centre. The parent-child link handles the
+// rest; this just keeps them anchored to the right spot.
+export const PARENT_PIN_STRENGTH     = 0.10;
 
 // Fit-to-screen padding when centering the graph after load.
 export const CENTER_PAD              = 120;  // px around the bounding box of root nodes
@@ -105,3 +144,17 @@ export const CLICK_DEBOUNCE_MS       = 220;
 // are exposed automatically — no clicking needed.
 // Set to 1.0 to match the original "edges ≤ nodes" threshold, or 0 to disable.
 export const SPARSE_EDGE_RATIO       = 1.0;
+
+// Reheat energy when toggling/clearing focus. Focus is triggered by a deliberate
+// Alt+click and changes which edges pull, so a gentle relayout is wanted (and
+// accidental plain clicks no longer trigger it). Lower = calmer settle.
+export const FOCUS_REHEAT_ALPHA      = 0.3;
+
+// ─── Nested (included) maps ─────────────────────────────────────────────────
+
+// Nested nodes keep their inner map's layout, recentred on the mount node and
+// scaled down by this factor so a large subproject map becomes a compact cluster
+// inside the mount container. 1 = original size.
+export const NESTED_SCALE            = 0.35;
+
+// ─── Focus / edge exposure (continued) ──────────────────────────────────────

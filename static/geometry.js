@@ -1,8 +1,22 @@
 // ─── Coordinate geometry ──────────────────────────────────────────────────────
 // Pure coordinate helpers.  No render side-effects; imports only constants/state.
 
-import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM } from './constants.js';
+import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, CONTAINER_MARGIN } from './constants.js';
 import { svg } from './state.js';
+
+// ─── Container collision geometry ──────────────────────────────────────────────
+
+// Centre of a container's box (which follows its children, not the parent node).
+export function containerCenter(b) {
+  return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+}
+
+// Collision radius for a container — the circle that circumscribes its box, plus
+// the perimeter margin. Analogous to COLLISION_RADIUS for a node, but sized to
+// the box so it grows/shrinks with the container.
+export function containerRadius(b) {
+  return 0.5 * Math.hypot(b.w, b.h) + CONTAINER_MARGIN;
+}
 
 // ─── Viewport ─────────────────────────────────────────────────────────────────
 

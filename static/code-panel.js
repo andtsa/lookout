@@ -21,7 +21,7 @@ export async function openCodePanel(nodeOrPath) {
   if (!source && source !== '') return;
 
   codePanelPath.textContent  = source;
-  codePanelContent.innerHTML = '<pre style="color:#666;padding:8px 12px">Loading…</pre>';
+  codePanelContent.innerHTML = '<pre style="color:var(--text-faint);padding:8px 12px">Loading…</pre>';
   codePanel.classList.add('open');
 
   try {
@@ -30,7 +30,7 @@ export async function openCodePanel(nodeOrPath) {
     else                           renderFileInPanel(data, source);
   } catch (e) {
     codePanelContent.innerHTML =
-      `<pre style="color:#f66;padding:8px 12px">Error: ${e.message}</pre>`;
+      `<pre style="color:#fb4934;padding:8px 12px">Error: ${e.message}</pre>`;
   }
 }
 

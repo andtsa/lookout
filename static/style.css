@@ -1,24 +1,25 @@
 :root {
-  --bg-base:        #0a0a1e;
-  --bg-surface:     #06112e;
-  --bg-deep:        #0f2430;
-  --bg-panel:       #0d0d1a;
-  --border-dim:     #333;
-  --border-subtle:  #222;
-  --accent:         #4a9eff;
-  --accent-light:   #80bfff;
-  --accent-muted:   rgba(74, 158, 255, 0.15);
-  --accent-border:  rgba(74, 158, 255, 0.3);
-  --accent-hover:   rgba(74, 158, 255, 0.28);
-  --teal:           #7ec8e3;
-  --gold:           #ffd700;
-  --focus:          #e06cff;  /* violet — focused node ring */
-  --text-primary:   #e0e0e0;
-  --text-secondary: #b0c4de;
-  --text-dim:       #888;
-  --text-faint:     #666;
-  --text-muted:     #555;
-  --text-dir:       #c8c8c8;
+  /* ── Retrobox — warm gruvbox-family retro palette ───────────────────────── */
+  --bg-base:        #1d2021;  /* canvas — hard dark */
+  --bg-surface:     #3c3836;  /* level-0 node fill, menus, panels */
+  --bg-deep:        #282828;  /* level-1 node fill, hover backgrounds */
+  --bg-panel:       #1d2021;  /* code panel */
+  --border-dim:     #665c54;
+  --border-subtle:  #504945;
+  --accent:         #fe8019;  /* orange — primary: level-0 nodes, edges, arrows */
+  --accent-light:   #ffb454;  /* hover brighten */
+  --accent-muted:   rgba(254, 128, 25, 0.15);
+  --accent-border:  rgba(254, 128, 25, 0.30);
+  --accent-hover:   rgba(254, 128, 25, 0.28);
+  --teal:           #83a598;  /* gruvbox blue — level-1 nodes (cool contrast) */
+  --gold:           #fabd2f;  /* yellow — pinned / LOD target */
+  --focus:          #d3869b;  /* purple — focused node ring */
+  --text-primary:   #ebdbb2;  /* cream */
+  --text-secondary: #d5c4a1;
+  --text-dim:       #a89984;
+  --text-faint:     #928374;
+  --text-muted:     #7c6f64;
+  --text-dir:       #d5c4a1;
 }
 
 * {
@@ -37,6 +38,8 @@ body {
 }
 
 #canvas {
+  display: block; /* not inline — inline SVG can fail to fill the viewport, so
+                     wheel events over empty areas miss the element (no zoom) */
   width: 100vw;
   height: 100vh;
   cursor: grab;
@@ -96,6 +99,14 @@ body {
   stroke-width: 1px;
 }
 
+/* Node shape by kind (NodeKind). Corner radius carries the silhouette while
+   keeping text inside: sharp box = directory, document = file, rounded = concept,
+   pill = symbol. (ry clamps to half-height, so symbols read as stadiums.) */
+.node.kind-dir     .node-rect { rx: 1px;  ry: 1px; }
+.node.kind-file    .node-rect { rx: 4px;  ry: 4px; }
+.node.kind-concept .node-rect { rx: 13px; ry: 13px; }
+.node.kind-symbol  .node-rect { rx: 22px; ry: 22px; }
+
 .node text {
   fill: var(--text-primary);
   font-size: 13px;
@@ -124,11 +135,30 @@ body {
 .node.node-focused:hover .container-rect {
   stroke: color-mix(in srgb, var(--focus) 60%, white);
   stroke-width: 2.5px;
-  filter: drop-shadow(0 0 7px rgba(224, 108, 255, 0.6));
+  filter: drop-shadow(0 0 7px rgba(211, 134, 155, 0.6));
 }
 
 .node.pinned .node-rect {
   stroke: var(--gold);
+}
+
+/* Nested (included) nodes — read-only content from another config. Dashed +
+   slightly dimmed to signal "you can view but not edit this here". */
+.node.node-nested .node-rect,
+.node.node-nested .container-rect {
+  stroke-dasharray: 2 3;
+  opacity: 0.8;
+}
+
+/* Broken source binding — the `source:` path doesn't exist on disk. Surfaced
+   so stale bindings are visible without having to open the file. */
+.node.broken-source .node-rect,
+.node.broken-source .container-rect {
+  stroke: #e0602c;
+  stroke-dasharray: 3 2;
+}
+.node.broken-source text {
+  fill: #e0602c;
 }
 
 /* Focused node — violet ring + subtle glow to show exposed-edge membership */
@@ -136,7 +166,7 @@ body {
 .node.node-focused .container-rect {
   stroke: var(--focus);
   stroke-width: 2.5px;
-  filter: drop-shadow(0 0 5px rgba(224, 108, 255, 0.45));
+  filter: drop-shadow(0 0 5px rgba(211, 134, 155, 0.45));
 }
 
 /* Edges */
@@ -157,11 +187,17 @@ body {
   opacity: 0.6;
 }
 
+/* Arrowhead marker — themed via CSS so it follows --accent */
+#arrow path {
+  fill: var(--accent);
+}
+
 .edge-annotation {
   fill: var(--text-dim);
   font-size: 10px;
   font-family: monospace;
-  pointer-events: none;
+  pointer-events: all;   /* clickable to edit — it can float away from the line */
+  cursor: pointer;
 }
 
 /* Editing */
@@ -214,6 +250,36 @@ body {
 #dirty-indicator {
   color: var(--gold);
 }
+
+#discard-btn {
+  pointer-events: auto;   /* #hud is pointer-events:none — re-enable for the button */
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  color: var(--focus);
+  font-family: monospace;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 3px;
+}
+#discard-btn:hover { border-color: var(--focus); }
+#discard-btn[hidden] { display: none; }
+
+/* Force debug overlay (toggle with D) */
+#debug-indicator { color: #e0602c; font-size: 10px; }
+#debug-indicator[hidden] { display: none; }
+
+.dbg-collide { fill: none; stroke: var(--teal); stroke-width: 0.5px; opacity: 0.16; pointer-events: none; }
+.dbg-vel     { stroke: #e0602c; stroke-width: 1.3px; opacity: 0.9; pointer-events: none; }
+.dbg-target  { stroke-width: 1px; stroke-dasharray: 3 3; opacity: 0.5; pointer-events: none; }
+.dbg-target[data-kind="pin"]    { stroke: var(--gold); }
+.dbg-target[data-kind="zone"]   { stroke: var(--focus); }
+.dbg-target[data-kind="parent"] { stroke: var(--teal); }
+.dbg-target-dot { pointer-events: none; opacity: 0.85; }
+.dbg-target-dot[data-kind="pin"]    { fill: var(--gold); }
+.dbg-target-dot[data-kind="zone"]   { fill: var(--focus); }
+.dbg-target-dot[data-kind="parent"] { fill: var(--teal); }
 
 /* Code panel */
 #code-panel {
@@ -460,7 +526,7 @@ body {
 .node.node-lod-target .container-rect {
   stroke: var(--gold);
   stroke-width: 2px;
-  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.35));
+  filter: drop-shadow(0 0 4px rgba(250, 189, 47, 0.35));
 }
 
 /* Leaf hover — muted border signals "no expansion here" */
@@ -473,7 +539,7 @@ body {
 /* Leaf flash — brief red pulse when scroll is attempted on a leaf */
 @keyframes leafFlash {
   0%, 100% { stroke: var(--text-muted); }
-  50%       { stroke: #e05555 }
+  50%       { stroke: #fb4934 }
 }
 .node.node-leaf-flash .node-rect {
   animation: leafFlash 0.5s ease-in-out;
@@ -491,7 +557,7 @@ body {
 /* Edge click target (wider invisible stroke) */
 .edge-hitarea {
   stroke: transparent;
-  stroke-width: 12px;
+  stroke-width: 20px;
   fill: none;
   cursor: pointer;
 }

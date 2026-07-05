@@ -28,6 +28,12 @@ export async function postSave() {
   return r.json();
 }
 
+// Discard in-memory edits: the backend re-parses config + state from disk.
+export async function postReload() {
+  const r = await fetch(`${BASE}/reload`, { method: 'POST' });
+  return r.json();
+}
+
 export async function fetchFile(path, start, end) {
   const params = new URLSearchParams({ path });
   if (start != null) params.set('start', start);

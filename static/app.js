@@ -3,12 +3,15 @@
 // (keyboard shortcuts, window resize).  Module-specific logic lives in the
 // imported modules; this file only wires them together.
 
-import { fetchGraph, postSave } from './api.js';
+import { fetchGraph, postSave, postReload, fetchStatus } from './api.js';
 import {
   nodes, edges, labelNodes, nodeLayer, svg, zoom,
   setNodes, setEdges, setSourceToNode, getDirty, setDirty,
   setParentDisplayMode, parentDisplayMode, clearFocus,
+  setDebugMode, debugMode,
 } from './state.js';
+import { renderDebug, clearDebug } from './debug.js';
+import { NESTED_SCALE, FOCUS_REHEAT_ALPHA } from './constants.js';
 import { initialPosition } from './geometry.js';
 import { isNodeVisible, globalExpand, globalCollapse } from './lod.js';
 import { initLabelNodes, buildSimulation, centerGraph, scheduleCenterGraph } from './simulation.js';
@@ -24,7 +27,11 @@ import { normaliseSource } from './code-panel.js';
 // Called whenever the LOD state changes (expand / collapse of any node).
 // Updates DOM opacity, rebuilds the simulation, and refreshes all indicators.
 
-export function refreshVisibility() {
+// alpha controls how hard the simulation reheats. Expand/collapse reveals or
+// hides nodes and wants a full relayout (alpha 1); a focus toggle only changes
+// which edges exert force, so it passes a low alpha for a gentle settle instead
+// of flinging the whole graph around.
+export function refreshVisibility(alpha = 1) {
   // Initialise label phantom nodes that just became visible for the first time
   for (const [eid, ln] of Object.entries(labelNodes)) {
     if (ln._placed) continue;
@@ -50,7 +57,7 @@ export function refreshVisibility() {
   updateContainers();
   rerenderEdges();
   updateFocusHighlights();
-  buildSimulation();
+  buildSimulation(alpha);
   updateModeIndicator();
   updateLodIndicator(d3.zoomTransform(svg.node()).k);
 }
@@ -71,7 +78,7 @@ document.addEventListener('keydown', async e => {
 
   // Escape: clear all focused nodes (while input is open, let the browser handle it)
   if (e.key === 'Escape' && !inInput) {
-    if (clearFocus()) refreshVisibility();
+    if (clearFocus()) refreshVisibility(FOCUS_REHEAT_ALPHA);
     return;
   }
 
@@ -82,6 +89,12 @@ document.addEventListener('keydown', async e => {
     setParentDisplayMode(parentDisplayMode === 'ghost' ? 'container' : 'ghost');
     updateContainers();
     updateModeIndicator();
+  }
+
+  // D: toggle the force-debug overlay (draw once now — a settled sim won't tick)
+  if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    setDebugMode(!debugMode);
+    if (debugMode) renderDebug(); else clearDebug();
   }
 
   // +/= zoom in   −/_ zoom out
@@ -100,6 +113,56 @@ document.addEventListener('keydown', async e => {
     if (globalCollapse()) refreshVisibility();
   }
 });
+
+// ─── Nested map placement ───────────────────────────────────────────────────
+// Nested (included) nodes carry their inner map's absolute pins. Recenter each
+// inner map's bounding box on its mount node and scale it down, so the
+// subproject's designed layout is preserved as a compact cluster. The shifted
+// value becomes the node's pin, so buildSimulation fixes it (fx/fy) → rigid.
+
+function placeNestedClusters() {
+  // Group nested nodes by their mount (nearest non-nested ancestor). A nested
+  // node the user has manually moved (pin came from the state file) keeps that
+  // position instead of being auto-placed.
+  const groups = {};
+  for (const node of Object.values(nodes)) {
+    if (!node.nested) continue;
+    if (node.pin_from_state && node.pin) {
+      node.x = node.pin.x;
+      node.y = node.pin.y;
+      continue;
+    }
+    let a = nodes[node.parent];
+    while (a && a.nested) a = nodes[a.parent];
+    if (!a) continue;
+    (groups[a.id] ||= []).push(node);
+  }
+
+  for (const [mountId, group] of Object.entries(groups)) {
+    const mount = nodes[mountId];
+    if (!mount) continue;
+
+    // Bounding-box center of the group's inner pins.
+    const pinned = group.filter(n => n.pin);
+    let cx = 0, cy = 0;
+    if (pinned.length) {
+      const xs = pinned.map(n => n.pin.x), ys = pinned.map(n => n.pin.y);
+      cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+      cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    }
+
+    for (const n of group) {
+      if (n.pin) {
+        n.x = mount.x + (n.pin.x - cx) * NESTED_SCALE;
+        n.y = mount.y + (n.pin.y - cy) * NESTED_SCALE;
+        n.pin = { x: n.x, y: n.y };  // fixed relative to the mount → rigid cluster
+      } else {
+        n.x = mount.x + (Math.random() - 0.5) * 60;
+        n.y = mount.y + (Math.random() - 0.5) * 60;
+      }
+    }
+  }
+}
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -121,13 +184,16 @@ async function init() {
   }
   setSourceToNode(srcMap);
 
-  // Assign initial positions (roots first so children can reference parent pos)
+  // Assign initial positions (roots first so children can reference parent pos).
+  // Nested nodes are placed afterward, relative to their mount.
   const sorted = Object.values(nodes).sort((a, b) => a.level - b.level);
   for (const node of sorted) {
+    if (node.nested) continue;
     const pos = initialPosition(node, nodes);
     node.x = pos.x;
     node.y = pos.y;
   }
+  placeNestedClusters();
 
   initLabelNodes();
   renderNodes();
@@ -145,7 +211,22 @@ async function init() {
   buildSimulation();
   scheduleCenterGraph();
   svg.node().focus();
+
+  // Reflect the backend's dirty flag — it survives page refresh (unsaved edits
+  // live in the server's in-memory graph), so the indicator must come from there.
+  try {
+    const st = await fetchStatus();
+    setDirty(!!st.dirty);
+  } catch { /* status is best-effort */ }
 }
+
+// Discard: tell the backend to re-parse config + state from disk (dropping any
+// unsaved in-memory edits), then hard-reload the page to render the clean graph.
+document.getElementById('discard-btn').addEventListener('click', async () => {
+  if (!confirm('Discard all unsaved edits and reload from disk?')) return;
+  await postReload();
+  window.location.reload();
+});
 
 // ─── Window resize ────────────────────────────────────────────────────────────
 

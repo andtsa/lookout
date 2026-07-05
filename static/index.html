@@ -6,7 +6,7 @@
   <title>vgraphtree</title>
   <link rel="stylesheet" href="/style.css">
   <!-- highlight.js for code panel syntax highlighting -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/base16/gruvbox-dark-hard.min.css">
 </head>
 <body>
 
@@ -16,9 +16,11 @@
 <div id="hud">
   <div id="lod-indicator">k=0.00</div>
   <div id="mode-indicator"></div>
+  <div id="debug-indicator" hidden></div>
   <div id="dirty-indicator"></div>
+  <button id="discard-btn" hidden>discard edits</button>
   <div style="color:#444;margin-top:4px">
-    Scroll over node: expand/collapse · Scroll: zoom · +/−: zoom · E/C: expand/collapse all · Shift+drag: pin · Click: focus · Dbl-click: open source · Right-click: rename/unpin · Click edge: annotate · Esc: clear focus · Ctrl+S: save · G: ghost/container
+    Scroll: zoom · Alt+scroll over node: expand/collapse · +/−: zoom · E/C: expand/collapse all · Shift+drag: pin · Alt+click: focus · Dbl-click: open source · Right-click: rename/unpin · Click edge: annotate · Esc: clear focus · Ctrl+S: save · G: ghost/container · D: force debug
   </div>
 </div>
 

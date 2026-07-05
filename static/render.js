@@ -22,7 +22,7 @@ export function renderNodes() {
 
   const enter = sel.enter().append('g')
     .attr('id',        d => `node-${d.id}`)
-    .attr('class',     d => `node level-${d.level}${d.pin ? ' pinned' : ''}`)
+    .attr('class',     d => `node level-${d.level}${d.pin ? ' pinned' : ''}${d.source_missing ? ' broken-source' : ''}${d.nested ? ' node-nested' : ''}${d.kind ? ' kind-' + d.kind : ''}`)
     .attr('data-id',   d => d.id)
     .attr('transform', d => `translate(${d.x},${d.y})`)
     .attr('opacity',        d => isNodeVisible(d) ? 1 : 0)
@@ -44,7 +44,7 @@ export function renderNodes() {
 
   // Merge to keep class in sync (pin state changes after drag)
   enter.merge(sel)
-    .attr('class', d => `node level-${d.level}${d.pin ? ' pinned' : ''}`);
+    .attr('class', d => `node level-${d.level}${d.pin ? ' pinned' : ''}${d.source_missing ? ' broken-source' : ''}${d.nested ? ' node-nested' : ''}${d.kind ? ' kind-' + d.kind : ''}`);
 
   sel.exit().remove();
 }
@@ -174,6 +174,10 @@ export function updateContainers() {
       };
     });
 
+    // Box hugs the descendants tightly (+ padding). Not recentred on the parent
+    // pin — the old symmetric-around-pin growth doubled the box whenever children
+    // sat off to one side, which both ballooned the container and left empty space
+    // for foreign nodes to fall into.
     const minX = Math.min(...allBounds.map(b => b.minX)) - CONTAINER_PAD;
     const maxX = Math.max(...allBounds.map(b => b.maxX)) + CONTAINER_PAD;
     const minY = Math.min(...allBounds.map(b => b.minY)) - CONTAINER_PAD - CONTAINER_LABEL_H;

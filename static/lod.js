@@ -43,9 +43,9 @@ export function getVisibleProxy(nodeId) {
 
 // ─── Per-node expand / collapse ───────────────────────────────────────────────
 
-// Expand one level in this node's subtree (direct scroll-based expand).
-// Children that have no position yet are placed near the parent.
-// Returns true always (the caller still refreshes).
+// Reveal this node's direct children (scroll-based expand). Placing children
+// that have no position yet near the parent. Idempotent: expandedDepth is
+// boolean, so re-expanding an already-open node is a no-op.
 export function expandNode(node) {
   for (const cid of (node.children || [])) {
     const c = nodes[cid];
@@ -54,7 +54,7 @@ export function expandNode(node) {
       c.y = node.y + (Math.random() - 0.5) * EXPAND_JITTER;
     }
   }
-  node.expandedDepth++;
+  node.expandedDepth = 1;
   return true;
 }
 
@@ -72,49 +72,48 @@ export function collapseDeepestIn(node) {
     return n.expandedDepth > 0 ? n : null;
   }
   const target = deepest(node);
-  if (target) target.expandedDepth--;
+  if (target) target.expandedDepth = 0;
   return !!target;
 }
 
 // ─── Global expand / collapse ─────────────────────────────────────────────────
-// E — advance the shallowest frontier (nodes at minimum expandedDepth).
-// C — retract the deepest frontier, honouring tree-level ordering so that
-//     pressing C once undoes exactly one E, even when multiple tree levels
-//     share the same expandedDepth value.
+// expandedDepth is effectively boolean per node: 0 = children hidden, 1 = shown
+// (isNodeVisible only checks `parent.expandedDepth >= 1`). Because a node is
+// visible only when its parent is expanded, the set of *visible, collapsed,
+// non-leaf* nodes is exactly the current outer frontier, and the *innermost
+// expanded* nodes are the inner frontier. Working from those sets makes E/C
+// naturally saturate — E stops when nothing collapsed remains to open, C stops
+// when nothing is expanded — with no depth counter to run away.
 
 export function globalExpand() {
-  const targets = Object.values(nodes).filter(n => isNodeVisible(n) && !isLeafNode(n));
-  if (targets.length === 0) { flashLodNothing(); return false; }
-  const minDepth = Math.min(...targets.map(n => n.expandedDepth));
-  for (const n of targets.filter(t => t.expandedDepth === minDepth)) {
+  // Outer frontier: visible non-leaf nodes whose children are still hidden.
+  const frontier = Object.values(nodes).filter(
+    n => isNodeVisible(n) && !isLeafNode(n) && n.expandedDepth === 0);
+  if (frontier.length === 0) { flashLodNothing(); return false; }
+  for (const n of frontier) {
     for (const cid of (n.children || [])) {
       const c = nodes[cid];
       if (c && c.x == null) {
-        c.x = n.x + (Math.random() - 0.5) * 20;
-        c.y = n.y + (Math.random() - 0.5) * 20;
+        c.x = n.x + (Math.random() - 0.5) * EXPAND_JITTER;
+        c.y = n.y + (Math.random() - 0.5) * EXPAND_JITTER;
       }
     }
-    n.expandedDepth++;
+    n.expandedDepth = 1;
   }
   return true;
 }
 
 export function globalCollapse() {
-  const targets = Object.values(nodes).filter(n => isNodeVisible(n) && !isLeafNode(n));
-  if (targets.length === 0) { flashLodNothing(); return false; }
-  const maxDepth = Math.max(...targets.map(n => n.expandedDepth));
-  if (maxDepth === 0) { flashLodNothing(); return false; }
-
-  // Bug fix: after two E presses, both level-0 roots (depth=1) and their
-  // level-1 children (depth=1) share the same expandedDepth.  Without the
-  // level tiebreaker, one C press would collapse BOTH levels simultaneously,
-  // jumping straight back to the initial state.
-  // Fix: among nodes at maxDepth, only collapse those at the deepest tree
-  // level — the outermost shell of the expansion.
-  const atMax    = targets.filter(t => t.expandedDepth === maxDepth);
-  const maxLevel = Math.max(...atMax.map(n => n.level));
-  for (const n of atMax.filter(n => n.level === maxLevel)) {
-    n.expandedDepth--;
+  const expanded = Object.values(nodes).filter(n => isNodeVisible(n) && n.expandedDepth > 0);
+  if (expanded.length === 0) { flashLodNothing(); return false; }
+  // Inner frontier: expanded nodes with no expanded (visible) child — the
+  // deepest revealed layer. Collapsing these undoes exactly one E.
+  const hasExpandedChild = n => (n.children || []).some(cid => {
+    const c = nodes[cid];
+    return c && isNodeVisible(c) && c.expandedDepth > 0;
+  });
+  for (const n of expanded.filter(n => !hasExpandedChild(n))) {
+    n.expandedDepth = 0;
   }
   return true;
 }

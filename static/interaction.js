@@ -17,17 +17,15 @@ import { buildSimulation } from './simulation.js';
 import { getEdgeEndpoints } from './geometry.js';
 import { patchNode, patchEdge } from './api.js';
 import { openCodePanel } from './code-panel.js';
-import { SCROLL_THRESHOLD, DRAG_THRESHOLD } from './constants.js';
+import { SCROLL_THRESHOLD, DRAG_THRESHOLD, FOCUS_REHEAT_ALPHA } from './constants.js';
 
 // ─── Drag ─────────────────────────────────────────────────────────────────────
 
-let _dragShift  = false;
 let _dragMoved  = false;  // true once pointer travels more than DRAG_THRESHOLD
 let _dragOriginX = 0;     // pointer position at drag start (SVG coords)
 let _dragOriginY = 0;
 
 function dragStarted(event, d) {
-  _dragShift   = event.sourceEvent && event.sourceEvent.shiftKey;
   _dragMoved   = false;
   _dragOriginX = event.x;
   _dragOriginY = event.y;
@@ -44,8 +42,12 @@ function dragged(event, d) {
     const dy = event.y - _dragOriginY;
     if (dx * dx + dy * dy < DRAG_THRESHOLD * DRAG_THRESHOLD) return;
     // Threshold crossed — upgrade to a real drag and heat the simulation.
+    // NB: no `!event.active` guard here. Inside the drag handler the gesture is
+    // already active (event.active >= 1), so that guard is always false — which
+    // previously meant the sim never reheated, and a dragged non-expanded node
+    // (e.g. a pinned top-level node) never re-rendered until a page refresh.
     _dragMoved = true;
-    if (!event.active && simulation) simulation.alphaTarget(0.3).restart();
+    if (simulation) simulation.alphaTarget(0.3).restart();
     svg.classed('dragging', true);
   }
   const dx = event.x - d.fx;
@@ -77,7 +79,14 @@ function dragEnded(event, d) {
   if (!_dragMoved) { d.fx = null; d.fy = null; return; } // click, not a drag
   if (!event.active && simulation) simulation.alphaTarget(0);
 
-  if (_dragShift) {
+  // Nested nodes' positions are outer-owned: a drag persists as a pin in the
+  // state file (keyed by the namespaced id), same as any other node below.
+
+  // Decide pin vs release based on whether Shift is held *now*, at release —
+  // this lets you start a plain drag and commit it as a pin (or not) by the
+  // state of the key when you let go, rather than when you grabbed the node.
+  const shiftAtRelease = event.sourceEvent && event.sourceEvent.shiftKey;
+  if (shiftAtRelease) {
     d.pin = { x: d.fx, y: d.fy };
     nodeLayer.selectAll('.node').filter(n => n.id === d.id).classed('pinned', true);
     setDirty(true);
@@ -180,9 +189,11 @@ export function startLabelEdit(d) {
 // ─── Edge annotation editing ──────────────────────────────────────────────────
 
 export function selectEdge(edgeId) {
-  setSelectedEdgeId(edgeId);
   const edge = edges[edgeId];
   if (!edge) return;
+  // Nested (included) edges are read-only — no annotation editing.
+  if (nodes[edge.from]?.nested || nodes[edge.to]?.nested) return;
+  setSelectedEdgeId(edgeId);
 
   const edgeVisual = edgeLayer.selectAll('.edge-visual').filter(d => d.id === edgeId);
   edgeVisual.classed('edge-renaming', true);
@@ -227,6 +238,9 @@ export function showContextMenu(event, d) {
   ctxMenu.style.left = `${event.clientX}px`;
   ctxMenu.style.top  = `${event.clientY}px`;
   ctxMenu.classList.add('visible');
+  // Nested (included) nodes have read-only *content* (no rename), but their
+  // position is editable — so unpin (reset to auto-placement) still applies.
+  document.getElementById('ctx-rename').style.display = d.nested ? 'none' : 'block';
   document.getElementById('ctx-unpin').style.display = d.pin ? 'block' : 'none';
 }
 
@@ -292,9 +306,13 @@ export function setupNodeInteractions(refreshFn) {
         .classed('node-leaf-hover', false);
     });
 
-  // Scroll: per-node expand / collapse
+  // Alt+scroll over a node: per-node expand / collapse.
+  // Plain scroll is left alone so it bubbles to the d3 zoom on <svg> — that way
+  // zoom works everywhere, including over nodes (global expand/collapse is E/C).
   allNodes.on('wheel.lod', function(event, d) {
+    if (!event.altKey) return; // let plain scroll zoom the canvas
     event.stopPropagation();
+    event.preventDefault();
     scrollAccum[d.id] = (scrollAccum[d.id] || 0) + event.deltaY;
     if (scrollAccum[d.id] > SCROLL_THRESHOLD) {
       scrollAccum[d.id] = 0;
@@ -309,16 +327,18 @@ export function setupNodeInteractions(refreshFn) {
     }
   });
 
-  // Single click: toggle focus on this node.
-  // D3 drag fires a synthetic click after drag end — suppress it if the pointer moved.
+  // Alt+click: toggle focus (deliberate — a plain click does nothing, so casual
+  // clicking never shuffles the map). D3 fires a synthetic click after a drag;
+  // suppress it if the pointer moved.
   allNodes.on('click', (event, d) => {
     event.stopPropagation();
     if (_dragMoved) { _dragMoved = false; return; }
+    if (!event.altKey) return;             // plain click: no-op
     toggleFocusedNode(d.id);
-    refreshFn();
+    refreshFn(FOCUS_REHEAT_ALPHA);         // relayout so the focused subgraph opens up
   });
 
-  // Double click: open code panel.
+  // Double click: open the source in the code panel.
   allNodes.on('dblclick', (event, d) => {
     event.stopPropagation();
     if (d.source) openCodePanel(d);
@@ -332,9 +352,9 @@ export function setupNodeInteractions(refreshFn) {
 }
 
 export function setupEdgeInteractions() {
-  edgeLayer.selectAll('.edge-hitarea-group')
-    .on('click', (event, d) => {
-      event.stopPropagation();
-      selectEdge(d.id);
-    });
+  const select = (event, d) => { event.stopPropagation(); selectEdge(d.id); };
+  edgeLayer.selectAll('.edge-hitarea-group').on('click', select);
+  // The annotation label often floats off the line (its phantom node position),
+  // so make the label itself a click target too.
+  edgeLayer.selectAll('.edge-visual').select('text.edge-annotation').on('click', select);
 }
