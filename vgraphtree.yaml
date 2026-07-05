@@ -1,166 +1,389 @@
 project:
-  root: "."
+  root: .
   lsp:
-    rust: "rust-analyzer"
-  snap_levels: [1.4, 2.0, 2.5, 4.0]
+    rust: rust-analyzer
+  snap_levels:
+  - 1.4
+  - 2.0
+  - 2.5
+  - 4.0
   depth_ceiling: 2
-
 nodes:
-  backend:
-    label: "Rust backend"
-    level: 0
-    source: "vgraphtree-server/"
-    origin: manual
-    pin: { x: 350, y: 300 }
-    children:
-      server_entry:
-        label: "Server entry"
-        level: 1
-        source: "vgraphtree-server/src/main.rs"
-        origin: manual
-        children: {}
-      graph_types:
-        label: "Graph types"
-        level: 1
-        source: "vgraphtree-server/src/graph.rs"
-        origin: manual
-        children: {}
-      config_parser:
-        label: "Config parser"
-        level: 1
-        source: "vgraphtree-server/src/config.rs"
-        origin: manual
-        children: {}
-      route_handlers:
-        label: "Route handlers"
-        level: 1
-        source: "vgraphtree-server/src/routes/"
-        origin: manual
-        children: 
-          edge:
-            label: "Edge"
-            level: 2
-            source: "vgraphtree-server/src/routes/edge.rs"
-            origin: manual
-            children: {}
-          file:
-            label: "File"
-            level: 2
-            source: "vgraphtree-server/src/routes/file.rs"
-            origin: manual
-            children: {}
-          graph:
-            label: "Graph"
-            level: 2
-            source: "vgraphtree-server/src/routes/graph.rs"
-            origin: manual
-            children: {}
-          node:
-            label: "Node"
-            level: 2
-            source: "vgraphtree-server/src/routes/node.rs"
-            origin: manual
-            children: {}
-          save:
-            label: "Save"
-            level: 2
-            source: "vgraphtree-server/src/routes/save.rs"
-            origin: manual
-            children: {}
-
   frontend:
-    label: "Web frontend"
+    label: Web frontend
     level: 0
-    source: "static/"
+    source: static/
     origin: manual
-    pin: { x: 900, y: 300 }
+    pin:
+      x: 1100.0
+      y: 200.0
     children:
-      canvas_app:
-        label: "Canvas & LOD"
+      mod_app:
+        label: App entry
         level: 1
-        source: "static/app.js"
+        source: static/app.js
         origin: manual
-        children: {}
+      mod_state:
+        label: State
+        level: 1
+        source: static/state.js
+        origin: manual
+      mod_constants:
+        label: Constants
+        level: 1
+        source: static/constants.js
+        origin: manual
+      mod_geometry:
+        label: Geometry
+        level: 1
+        source: static/geometry.js
+        origin: manual
+      mod_lod:
+        label: LOD
+        level: 1
+        source: static/lod.js
+        origin: manual
+      mod_render:
+        label: Render
+        level: 1
+        source: static/render.js
+        origin: manual
+      mod_simulation:
+        label: Simulation
+        level: 1
+        source: static/simulation.js
+        origin: manual
+      mod_code_panel:
+        label: Code panel
+        level: 1
+        source: static/code-panel.js
+        origin: manual
+      mod_interaction:
+        label: Interaction
+        level: 1
+        source: static/interaction.js
+        origin: manual
       api_client:
-        label: "API client"
+        label: API client
         level: 1
-        source: "static/api.js"
+        source: static/api.js
         origin: manual
-        children: {}
-      html_entry:
-        label: "HTML entry"
-        level: 1
-        source: "static/index.html"
-        origin: manual
-        children: {}
       stylesheet:
-        label: "Stylesheet"
+        label: Stylesheet
         level: 1
-        source: "static/style.css"
+        source: static/style.css
         origin: manual
-        children: {}
-
+      html_entry:
+        label: HTML entry
+        level: 1
+        source: static/index.html
+        origin: manual
   yaml_store:
-    label: "YAML store"
+    label: YAML store
     level: 0
-    source: "vgraphtree.yaml"
+    source: vgraphtree.yaml
     origin: manual
-    pin: { x: 625, y: 520 }
-    children: {}
+    pin:
+      x: 625.0
+      y: 700.0
+  backend:
+    label: Rust backend
+    level: 0
+    source: vgraphtree-server/
+    origin: manual
+    pin:
+      x: 150.0
+      y: 200.0
+    children:
+      route_handlers:
+        label: Route handlers
+        level: 1
+        source: vgraphtree-server/src/routes/
+        origin: manual
+        children:
+          save:
+            label: Save
+            level: 2
+            source: vgraphtree-server/src/routes/save.rs
+            origin: manual
+          graph:
+            label: Graph
+            level: 2
+            source: vgraphtree-server/src/routes/graph.rs
+            origin: manual
+          edge:
+            label: Edge
+            level: 2
+            source: vgraphtree-server/src/routes/edge.rs
+            origin: manual
+          node:
+            label: Node
+            level: 2
+            source: vgraphtree-server/src/routes/node.rs
+            origin: manual
+          file:
+            label: File
+            level: 2
+            source: vgraphtree-server/src/routes/file.rs
+            origin: manual
+      config_parser:
+        label: Config parser
+        level: 1
+        source: vgraphtree-server/src/config.rs
+        origin: manual
+      graph_types:
+        label: Graph types
+        level: 1
+        source: vgraphtree-server/src/graph.rs
+        origin: manual
+      server_entry:
+        label: Server entry
+        level: 1
+        source: vgraphtree-server/src/main.rs
+        origin: manual
+
 
 edges:
-  - id: frontend_to_backend
-    from: frontend
-    to: backend
-    annotation: "HTTP fetch API"
-    levels: [0, 1]
-    origin: manual
-
-  - id: backend_to_yaml
-    from: backend
-    to: yaml_store
-    annotation: "atomic read/write"
-    levels: [0, 1]
-    origin: manual
-
-  - id: canvas_to_api
-    from: canvas_app
-    to: api_client
-    annotation: "fetch wrappers"
-    levels: [1]
-    origin: manual
-
-  - id: server_to_types
-    from: server_entry
-    to: graph_types
-    annotation: "owns NodeGraph"
-    levels: [1]
-    origin: manual
-
-  - id: server_to_config
-    from: server_entry
-    to: config_parser
-    annotation: "parse on startup"
-    levels: [1]
-    origin: manual
-
-  - id: server_to_routes
-    from: server_entry
-    to: route_handlers
-    annotation: "registers handlers"
-    levels: [1]
-    origin: manual
-
-  - id: config_to_types
-    from: config_parser
-    to: graph_types
-    annotation: "produces NodeGraph"
-    levels: [1]
-    origin: manual
-
-  - id: routes_to_types
-    from: route_handlers
-    to: graph_types
-    annotation: "mutates graph"
-    levels: [1]
-    origin: manual
+# ─── Cross-system ──────────────────────────────────────────────────────────────
+- id: backend_to_yaml
+  from: backend
+  to: yaml_store
+  annotation: atomic read/write
+  levels:
+  - 0
+  - 1
+  origin: manual
+- id: frontend_to_backend
+  from: frontend
+  to: backend
+  annotation: HTTP fetch API
+  levels:
+  - 0
+  - 1
+  origin: manual
+# ─── Rust backend ──────────────────────────────────────────────────────────────
+- id: config_to_types
+  from: config_parser
+  to: graph_types
+  annotation: produces NodeGraph
+  levels:
+  - 1
+  origin: manual
+- id: routes_to_types
+  from: route_handlers
+  to: graph_types
+  annotation: mutates graph
+  levels:
+  - 1
+  origin: manual
+- id: server_to_config
+  from: server_entry
+  to: config_parser
+  annotation: parse on startup
+  levels:
+  - 1
+  origin: manual
+- id: server_to_routes
+  from: server_entry
+  to: route_handlers
+  annotation: registers handlers
+  levels:
+  - 1
+  origin: manual
+- id: server_to_types
+  from: server_entry
+  to: graph_types
+  annotation: owns NodeGraph
+  levels:
+  - 1
+  origin: manual
+# ─── JS module import graph ────────────────────────────────────────────────────
+- id: app_to_api
+  from: mod_app
+  to: api_client
+  annotation: fetchGraph / postSave
+  levels:
+  - 1
+  origin: manual
+- id: app_to_state
+  from: mod_app
+  to: mod_state
+  annotation: shared mutable state
+  levels:
+  - 1
+  origin: manual
+- id: app_to_lod
+  from: mod_app
+  to: mod_lod
+  annotation: expand / collapse triggers
+  levels:
+  - 1
+  origin: manual
+- id: app_to_simulation
+  from: mod_app
+  to: mod_simulation
+  annotation: rebuild on refresh
+  levels:
+  - 1
+  origin: manual
+- id: app_to_render
+  from: mod_app
+  to: mod_render
+  annotation: initial render + refresh
+  levels:
+  - 1
+  origin: manual
+- id: app_to_interaction
+  from: mod_app
+  to: mod_interaction
+  annotation: wire up event handlers
+  levels:
+  - 1
+  origin: manual
+- id: app_to_code_panel
+  from: mod_app
+  to: mod_code_panel
+  annotation: normaliseSource
+  levels:
+  - 1
+  origin: manual
+- id: interaction_to_lod
+  from: mod_interaction
+  to: mod_lod
+  annotation: expand / collapse calls
+  levels:
+  - 1
+  origin: manual
+- id: interaction_to_render
+  from: mod_interaction
+  to: mod_render
+  annotation: rerenderEdges / updateContainers
+  levels:
+  - 1
+  origin: manual
+- id: interaction_to_simulation
+  from: mod_interaction
+  to: mod_simulation
+  annotation: rebuild after mutation
+  levels:
+  - 1
+  origin: manual
+- id: interaction_to_code_panel
+  from: mod_interaction
+  to: mod_code_panel
+  annotation: open on node click
+  levels:
+  - 1
+  origin: manual
+- id: interaction_to_api
+  from: mod_interaction
+  to: api_client
+  annotation: patchNode / patchEdge
+  levels:
+  - 1
+  origin: manual
+- id: simulation_to_render
+  from: mod_simulation
+  to: mod_render
+  annotation: tick → update DOM
+  levels:
+  - 1
+  origin: manual
+- id: simulation_to_lod
+  from: mod_simulation
+  to: mod_lod
+  annotation: visibility + label radius
+  levels:
+  - 1
+  origin: manual
+- id: simulation_to_geometry
+  from: mod_simulation
+  to: mod_geometry
+  annotation: edge endpoints / zones
+  levels:
+  - 1
+  origin: manual
+- id: render_to_lod
+  from: mod_render
+  to: mod_lod
+  annotation: isNodeVisible / visibleDescendants
+  levels:
+  - 1
+  origin: manual
+- id: render_to_geometry
+  from: mod_render
+  to: mod_geometry
+  annotation: edge endpoints
+  levels:
+  - 1
+  origin: manual
+- id: code_panel_to_api
+  from: mod_code_panel
+  to: api_client
+  annotation: fetchFile
+  levels:
+  - 1
+  origin: manual
+- id: code_panel_to_geometry
+  from: mod_code_panel
+  to: mod_geometry
+  annotation: getViewportSize
+  levels:
+  - 1
+  origin: manual
+- id: lod_to_state
+  from: mod_lod
+  to: mod_state
+  annotation: reads / mutates nodes
+  levels:
+  - 1
+  origin: manual
+- id: geometry_to_state
+  from: mod_geometry
+  to: mod_state
+  annotation: SVG viewport ref
+  levels:
+  - 1
+  origin: manual
+- id: render_to_state
+  from: mod_render
+  to: mod_state
+  annotation: live bindings (nodes, edges…)
+  levels:
+  - 1
+  origin: manual
+- id: simulation_to_state
+  from: mod_simulation
+  to: mod_state
+  annotation: live bindings + setSimulation
+  levels:
+  - 1
+  origin: manual
+- id: interaction_to_state
+  from: mod_interaction
+  to: mod_state
+  annotation: live bindings + setters
+  levels:
+  - 1
+  origin: manual
+- id: code_panel_to_state
+  from: mod_code_panel
+  to: mod_state
+  annotation: nodes / sourceToNode / svg
+  levels:
+  - 1
+  origin: manual
+- id: geometry_to_constants
+  from: mod_geometry
+  to: mod_constants
+  annotation: node box dimensions
+  levels:
+  - 1
+  origin: manual
+- id: render_to_constants
+  from: mod_render
+  to: mod_constants
+  annotation: node box dimensions
+  levels:
+  - 1
+  origin: manual

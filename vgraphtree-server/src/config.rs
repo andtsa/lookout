@@ -16,11 +16,14 @@ pub struct ProjectConfig {
 pub struct YamlNode {
     pub label: String,
     pub level: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub origin: Origin,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pin: Option<Position>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub zone: Option<Zone>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub children: HashMap<String, YamlNode>,
 }
 
@@ -30,8 +33,9 @@ pub struct YamlEdge {
     pub id: String,
     pub from: String,
     pub to: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub annotation: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub levels: Vec<u32>,
     pub origin: Origin,
 }
