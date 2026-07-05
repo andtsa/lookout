@@ -128,6 +128,10 @@ export function globalCollapse() {
 export function isEdgeExposed(edge) {
   // Sparse graphs expose everything regardless of focus state.
   if (graphIsSparse) return true;
+  // No node focused → default state, whole graph is live. (Without this,
+  // clearing focus would leave every edge unexposed, so Esc appeared to do
+  // nothing — the graph stayed dimmed instead of returning to full.)
+  if (focusedNodeIds.size === 0) return true;
   // Otherwise an edge is only exposed when at least one endpoint is focused.
   return focusedNodeIds.has(edge.from) || focusedNodeIds.has(edge.to);
 }
