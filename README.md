@@ -48,8 +48,10 @@ edges:
 ```
 
 the resulting graph is rendered on an interactive canvas in the browser, and can be panned,
-zoomed, and dragged around.
+zoomed, and dragged around. related files/symbols/directories may be viewed directly in a
+panel in the browser
 
+![screenshot of an example graph](docs/example-1.png)
 
 ### nesting
 
