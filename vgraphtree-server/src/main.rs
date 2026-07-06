@@ -16,6 +16,7 @@ mod check;
 mod config;
 mod graph;
 mod kinds;
+mod personal_config;
 mod routes;
 mod state;
 
@@ -185,6 +186,10 @@ async fn serve(config_path: String, port: u16) -> ExitCode {
         .route("/edge/:id", patch(routes::edge::patch_edge))
         .route("/save", post(routes::save::post_save))
         .route("/reload", post(routes::reload::post_reload))
+        .route(
+            "/config",
+            get(routes::config::get_config).put(routes::config::put_config),
+        )
         .route("/file", get(routes::file::get_file))
         .route(
             "/status",

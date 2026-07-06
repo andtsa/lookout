@@ -8,7 +8,7 @@ nodes:
   frontend:
     label: Web frontend
     source: static/
-    pin: { x: 1100.0, y: 200.0 }
+    zone: top-right
     children:
       mod_app:         { label: App entry,   source: static/app.js }
       mod_state:       { label: State,        source: static/state.js }
@@ -26,12 +26,12 @@ nodes:
   yaml_store:
     label: YAML store
     source: vgraphtree.yaml
-    pin: { x: 625.0, y: 700.0 }
+    zone: bottom
 
   backend:
     label: Rust backend
     source: vgraphtree-server/
-    pin: { x: 150.0, y: 200.0 }
+    zone: top-left
     children:
       route_handlers:
         label: Route handlers

@@ -4,3 +4,5 @@ target/
 .claude/
 .vgraphtree/
 vgraphtree.state.yaml
+# personal config dotfile (per-project, not committed)
+.vgraphtree.config.yaml

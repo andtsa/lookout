@@ -1,3 +1,4 @@
+pub mod config;
 pub mod edge;
 pub mod file;
 pub mod graph;

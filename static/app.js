@@ -24,6 +24,8 @@ import {
 } from './render.js';
 import { setupNodeInteractions, setupEdgeInteractions } from './interaction.js';
 import { setupKeybindings, renderHelpBar } from './keybindings.js';
+import { loadConfig, onConfigChange } from './config.js';
+import { renderConfigPanel } from './config-panel.js';
 import { normaliseSource } from './code-panel.js';
 
 // ─── Visibility refresh ───────────────────────────────────────────────────────
@@ -96,6 +98,7 @@ const keyContext = {
     setDebugMode(!debugMode);
     if (debugMode) renderDebug(); else clearDebug();
   },
+  toggleConfigPanel: () => document.getElementById('config-panel').classList.toggle('hidden'),
   zoomBy: factor => svg.transition().duration(250).call(zoom.scaleBy, factor),
   expandAll:   () => { if (globalExpand())   refreshVisibility(); },
   collapseAll: () => { if (globalCollapse()) refreshVisibility(); },
@@ -174,6 +177,10 @@ function placeNestedClusters() {
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 async function init() {
+  // Load personal config first so the default engine, layout params, and colours
+  // are in effect before the first layout / render.
+  await loadConfig();
+
   const data = await fetchGraph();
 
   setNodes(data.nodes);
@@ -217,7 +224,14 @@ async function init() {
   setupNodeInteractions(refreshVisibility);
   setupEdgeInteractions();
 
-  buildSimulation();
+  // Render the config panel, and relayout when a non-colour setting changes
+  // (colour changes only touch CSS variables, no relayout needed).
+  renderConfigPanel(document.getElementById('config-panel'));
+  onConfigChange(field => { if (field.type !== 'color') refreshVisibility(1); });
+
+  // Initial layout via the configured engine.
+  if (layoutEngine === 'cola') runColaLayout(1, { mode: colaMode });
+  else buildSimulation();
   scheduleCenterGraph();
   svg.node().focus();
 

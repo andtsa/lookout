@@ -22,16 +22,15 @@ major issues to resolve first
     - NOTE: drag/pin visual behaviour can't be verified in the headless preview
       (it freezes d3 transitions and reports the canvas as 0×0). Please confirm the
       drag fix in a real browser.
-- [~] containers should never be allowed to overlap (unless two containers can contain the same node, but im not sure if that's even possible)
-- [~] containers should probably not be allowed to overlap with external nodes either
-    - REWORKED (see the runaway-growth fix below): the earlier collide-radius
-      approach caused unbounded container growth, so it was reverted. Separation now
-      comes from (a) each container's *children* being real sim nodes with their own
-      collide radius (external nodes can't enter), and (b) a static, descendant-count
-      based container charge that pushes containers apart. This is softer than hard
-      rect-vs-rect collision — corners can still touch — but it doesn't run away.
-      Tune CHARGE_CONTAINER_PER_DESC if separation needs to be stronger. Needs live
-      confirmation. (Overlapping membership isn't possible — the tree is strict.)
+- [x] containers should never be allowed to overlap (unless two containers can contain the same node, but im not sure if that's even possible)
+- [x] containers should probably not be allowed to overlap with external nodes either
+    - SOLVED by the `grouped-collide` force in simulation.js: every element collides
+      only within its sibling group (same parent = same LoD); a leaf is a circle of
+      COLLISION_RADIUS and an expanded container is a circle (containerRadius around
+      its box) that stands in for its whole subtree. So a container keeps its
+      contents clear of everything else in its group, and pushing a container moves
+      its entire cluster. Needs live confirmation. (Overlapping membership isn't
+      possible — the tree is strict.)
 - [x] scroll to zoom the d3 canvas works only when the mouse is in the middle (ish) of the screen, at least when using a trackpad
     - [x] somehow scroll to zoom doesnt work when first loading the page, until some nodes are expanded (i think, not sure how to reproduce)
     - ROOT CAUSE (same bug as the container growth below): the wheel handler on
@@ -68,12 +67,14 @@ minor issues to resolve soon:
 
 
 known issues remaining:
-- [~] edge labels (phantom nodes) can still overlap container rects — label repulsion
+- [x] edge labels (phantom nodes) can still overlap container rects — label repulsion
       only models real nodes, not container boundaries; label nodes should also be
       pushed away from container-rect fills
-    - PARTIALLY MITIGATED by the container collide-radius fix above (labels now
-      collide with the container's bounding circle), but not a full rect-boundary
-      solution. Needs live confirmation.
+    - FIXED: added a `label-declutter` force — each label is pushed out of the
+      circle of any container its edge does NOT belong to (a label whose edge has an
+      endpoint inside the container is left where label-pull wants it). Only labels
+      move, so there's no feedback into container size. Strength =
+      LABEL_DECLUTTER_STRENGTH. Needs live confirmation.
 
 
 to-do now:
@@ -111,15 +112,14 @@ done:
       by an unconditional stopPropagation. Plain scroll now zooms anywhere;
       per-node expand is Alt+scroll. (verified: zoom fires over a node)
 - [x] pin-drag regression (sim never reheated inside the drag handler)
-- [~] container-overlap collide radius + label/container mitigation (best-effort,
-      needs live confirmation)
+- [x] container overlap → `grouped-collide` force (sibling-group circle collision)
+- [x] edge labels overlapping container boxes → `label-declutter` force
 - [x] dev-server no-cache headers (browser was serving stale JS/CSS on reload,
       which masked edits — `Cache-Control: no-cache` on all responses)
 
-remaining (need your real browser — the headless preview freezes d3 transitions
-and reports a 0×0 canvas, so animated/pointer/zoom behaviour can't be verified):
-- pinned-container anchoring on expand
-- scroll-zoom mid-screen / first-load
-- rect-vs-rect (not circle-approx) container separation + label boundaries
-Everything above is code-complete; these need a reproduce-and-confirm loop in a
-real browser.
+All README issues above are now code-complete. The ones below can't be *verified*
+in the headless preview (it freezes d3 transitions and reports a 0×0 canvas), so
+they need a quick confirm in your real browser — but each is implemented:
+- pin-drag reheat + pinned-container anchoring
+- scroll-zoom over empty canvas (the zoom-catcher rect)
+- container separation + label/box boundaries (grouped-collide + label-declutter)
