@@ -6,7 +6,7 @@
 // config-architecture.md for the full model.
 
 use crate::graph::{Edge, Node, NodeGraph, Position, Zone};
-use crate::kinds::{EdgeKind, NodeKind};
+use crate::kinds::{EdgeKind, NodeKind, SymbolKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -41,7 +41,18 @@ pub struct IntentNode {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Symbol within `source`. Alternative to the `source: file::Name` shorthand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub col: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol_kind: Option<SymbolKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<NodeKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,6 +81,8 @@ pub struct IntentEdge {
     pub to: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<EdgeKind>,
 }
@@ -112,6 +125,7 @@ pub fn parse_intent(yaml_str: &str) -> Result<(NodeGraph, ProjectConfig), serde_
             from: intent_edge.from.clone(),
             to: intent_edge.to.clone(),
             annotation: intent_edge.annotation.clone(),
+            description: intent_edge.description.clone(),
             kind: intent_edge.kind.clone().unwrap_or_default(),
             id_derived,
         };
@@ -131,16 +145,31 @@ fn flatten_node(
     let child_ids: Vec<String> = intent.children.keys().cloned().collect();
     let label_overridden = intent.label.is_some();
 
+    // Split the `source: file::Name` shorthand into a plain path + symbol name.
+    // An explicit `symbol:` wins over the shorthand.
+    let (src_file, src_symbol) = split_source(intent.source.as_deref());
+    let symbol = intent.symbol.clone().or(src_symbol);
+
     let node = Node {
         id: id.to_string(),
         label: intent.label.clone().unwrap_or_else(|| id.to_string()),
+        description: intent.description.clone(),
         level,
-        kind: intent
-            .kind
-            .clone()
-            .unwrap_or_else(|| NodeKind::infer(intent.source.as_deref())),
+        // Explicit kind wins; otherwise a symbol binding → Symbol, else infer from
+        // the (plain) path.
+        kind: intent.kind.clone().unwrap_or_else(|| {
+            if symbol.is_some() {
+                NodeKind::Symbol
+            } else {
+                NodeKind::infer(src_file.as_deref())
+            }
+        }),
         parent: parent.clone(),
-        source: intent.source.clone(),
+        source: src_file,
+        symbol,
+        line: intent.line,
+        col: intent.col,
+        symbol_kind: intent.symbol_kind.clone(),
         zone: intent.zone.clone(),
         // Effective pin starts at the intent default; a state-file pin overrides
         // it after parse (see main.rs).
@@ -161,6 +190,18 @@ fn flatten_node(
 
     for (child_id, child) in &intent.children {
         flatten_node(child_id, child, Some(id.to_string()), level + 1, graph);
+    }
+}
+
+/// Split a `source` value into (file path, symbol name). `"a/b.rs::foo"` →
+/// `(Some("a/b.rs"), Some("foo"))`; `"a/b.rs"` → `(Some("a/b.rs"), None)`.
+fn split_source(source: Option<&str>) -> (Option<String>, Option<String>) {
+    match source {
+        None => (None, None),
+        Some(s) => match s.split_once("::") {
+            Some((file, sym)) if !sym.is_empty() => (Some(file.to_string()), Some(sym.to_string())),
+            _ => (Some(s.to_string()), None),
+        },
     }
 }
 
@@ -377,6 +418,7 @@ pub fn serialize_intent(
             from: e.from.clone(),
             to: e.to.clone(),
             annotation: e.annotation.clone(),
+            description: e.description.clone(),
             kind: if e.kind == EdgeKind::Semantic {
                 None
             } else {
@@ -414,7 +456,12 @@ fn build_intent_node(node: &Node, graph: &NodeGraph) -> IntentNode {
         }
     }
 
-    let inferred_kind = NodeKind::infer(node.source.as_deref());
+    // A symbol binding implies Symbol, so `kind: symbol` is redundant then.
+    let inferred_kind = if node.symbol.is_some() {
+        NodeKind::Symbol
+    } else {
+        NodeKind::infer(node.source.as_deref())
+    };
 
     IntentNode {
         label: if node.label_overridden {
@@ -422,7 +469,12 @@ fn build_intent_node(node: &Node, graph: &NodeGraph) -> IntentNode {
         } else {
             None
         },
+        description: node.description.clone(),
         source: node.source.clone(),
+        symbol: node.symbol.clone(),
+        line: node.line,
+        col: node.col,
+        symbol_kind: node.symbol_kind.clone(),
         kind: if node.kind == inferred_kind {
             None
         } else {

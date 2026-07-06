@@ -1,4 +1,4 @@
-use crate::kinds::{EdgeKind, NodeKind};
+use crate::kinds::{EdgeKind, NodeKind, SymbolKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -29,10 +29,32 @@ pub enum Zone {
 pub struct Node {
     pub id: String,
     pub label: String,
+    /// Longer free-text description. Shown inline under the title or in a hover
+    /// popup, per the `node_desc_mode` config setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub level: u32,
     pub kind: NodeKind,
     pub parent: Option<String>,
+    /// File (or dir) path this node binds to. For a symbol binding the `::name`
+    /// shorthand is split off into `symbol` at parse time, so this is always a
+    /// plain path the file panel can fetch directly.
     pub source: Option<String>,
+    /// Symbol this node points at within `source` (from an explicit `symbol:` or
+    /// the `source: file::Name` shorthand). Displayed, and searched for on open
+    /// when no explicit `line` is given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    /// 1-based line / column of the symbol. `line`, when set, is the authoritative
+    /// scroll+highlight target (beats searching by `symbol` name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub col: Option<usize>,
+    /// Symbol subtype (function / class / trait / …) — refines a Symbol node's
+    /// icon + colour. Layout is unaffected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol_kind: Option<SymbolKind>,
     pub zone: Option<Zone>,
     /// Effective pin: the state-file override if present, else the intent default.
     pub pin: Option<Position>,
@@ -80,7 +102,11 @@ pub struct Edge {
     pub id: String,
     pub from: String,
     pub to: String,
+    /// Short label drawn on the edge (the annotation phantom-label text).
     pub annotation: Option<String>,
+    /// Longer free-text description, revealed only on hover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub kind: EdgeKind,
     #[serde(skip)]
     pub id_derived: bool,

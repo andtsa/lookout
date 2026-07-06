@@ -90,6 +90,14 @@ export const CONFIG_SCHEMA = [
     fields: [
       num('SPARSE_EDGE_RATIO',  'Sparse ratio',   0, 5, 0.1,  'Edges ≤ this × nodes → graph shows all edges (focus off).'),
       num('FOCUS_REHEAT_ALPHA', 'Focus reheat',   0, 1, 0.05, 'Relayout energy when toggling / clearing focus.'),
+      num('DIM_EDGE_OPACITY',   'Faded edge opacity', 0, 1, 0.05, 'Opacity of dim / unfocused edges (0 = invisible, 1 = same as exposed).'),
+    ],
+  },
+  {
+    title: 'Nodes',
+    fields: [
+      { key: 'node_desc_mode', label: 'Descriptions', type: 'enum', enum: ['inline', 'hover'], default: 'hover', target: 'nodeDescMode', help: 'Show node descriptions inline (caption under the node) or only in a popup on hover.' },
+      { key: 'hover_delay',    label: 'Hover delay (ms)', type: 'number', min: 0, max: 3000, step: 50, default: 500, target: 'hoverDelay', help: 'How long the mouse must be still over a node/edge before its description popup appears.' },
     ],
   },
   {

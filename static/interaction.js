@@ -4,7 +4,7 @@
 // app.js after renderNodes / renderEdges.
 
 import {
-  nodes, edges, labelNodes, simulation, layoutEngine,
+  nodes, edges, labelNodes, simulation, layoutEngine, nodeDescriptionMode, hoverTipDelay,
   nodeLayer, edgeLayer, svg,
   scrollAccum, setHoveredNodeId, setSelectedEdgeId, setDirty, toggleFocusedNode,
 } from './state.js';
@@ -17,8 +17,34 @@ import { updateContainers, rerenderEdges } from './render.js';
 import { buildSimulation } from './simulation.js';
 import { getEdgeEndpoints } from './geometry.js';
 import { patchNode, patchEdge } from './api.js';
-import { openCodePanel } from './code-panel.js';
+import { openCodePanel, toggleCodePanel } from './code-panel.js';
 import { SCROLL_THRESHOLD, DRAG_THRESHOLD, FOCUS_REHEAT_ALPHA } from './constants.js';
+
+// ─── Hover tooltip (node / edge descriptions) ─────────────────────────────────
+
+const hoverTip = document.getElementById('hover-tip');
+let _tipTimer = null;
+
+function showTip(text, x, y) {
+  hoverTip.textContent = text;
+  hoverTip.hidden = false;
+  // Offset from the cursor and keep it inside the viewport.
+  const left = Math.min(x + 14, window.innerWidth  - hoverTip.offsetWidth  - 8);
+  const top  = Math.min(y + 14, window.innerHeight - hoverTip.offsetHeight - 8);
+  hoverTip.style.left = `${Math.max(8, left)}px`;
+  hoverTip.style.top  = `${Math.max(8, top)}px`;
+}
+
+// Arm the tooltip to appear only once the mouse has been still for hoverTipDelay.
+// Called on every mouseenter/mousemove, so any movement resets the timer (and
+// hides a shown tip), so the popup only surfaces when the pointer settles.
+function scheduleTip(text, x, y) {
+  clearTimeout(_tipTimer);
+  if (!text) { hoverTip.hidden = true; return; }
+  hoverTip.hidden = true; // hide while moving; re-appears when still
+  _tipTimer = setTimeout(() => showTip(text, x, y), hoverTipDelay);
+}
+function cancelTip() { clearTimeout(_tipTimer); _tipTimer = null; hoverTip.hidden = true; }
 
 // ─── Drag ─────────────────────────────────────────────────────────────────────
 
@@ -304,14 +330,24 @@ export function setupNodeInteractions(refreshFn) {
       setHoveredNodeId(d.id);
       d3.select(this).classed('node-lod-target', true);
       if (isLeafNode(d)) d3.select(this).classed('node-leaf-hover', true);
+      nodeTip(event, d);
     })
+    // Reset the settle-timer as the mouse moves within the node.
+    .on('mousemove.tip', nodeTip)
     .on('mouseleave.lod', function(event, d) {
       setHoveredNodeId(null);
       scrollAccum[d.id] = 0;
       d3.select(this)
         .classed('node-lod-target', false)
         .classed('node-leaf-hover', false);
+      cancelTip();
     });
+
+  // In 'hover' mode a node's description is shown only in the settle tooltip.
+  function nodeTip(event, d) {
+    if (nodeDescriptionMode === 'hover' && d.description)
+      scheduleTip(d.description, event.clientX, event.clientY);
+  }
 
   // Alt+scroll over a node: per-node expand / collapse.
   // Plain scroll is left alone so it bubbles to the d3 zoom on <svg> — that way
@@ -345,10 +381,11 @@ export function setupNodeInteractions(refreshFn) {
     refreshFn(FOCUS_REHEAT_ALPHA);         // relayout so the focused subgraph opens up
   });
 
-  // Double click: open the source in the code panel.
+  // Double click: toggle the source panel — open it (or switch to this node),
+  // or close it if it's already showing this node.
   allNodes.on('dblclick', (event, d) => {
     event.stopPropagation();
-    if (d.source) openCodePanel(d);
+    if (d.source) toggleCodePanel(d);
   });
 
   // Right-click: context menu (rename, unpin, open source).
@@ -360,8 +397,37 @@ export function setupNodeInteractions(refreshFn) {
 
 export function setupEdgeInteractions() {
   const select = (event, d) => { event.stopPropagation(); selectEdge(d.id); };
-  edgeLayer.selectAll('.edge-hitarea-group').on('click', select);
-  // The annotation label often floats off the line (its phantom node position),
-  // so make the label itself a click target too.
-  edgeLayer.selectAll('.edge-visual').select('text.edge-annotation').on('click', select);
+  const visualFor = id => edgeLayer.selectAll('.edge-visual').filter(x => x.id === id);
+
+  // Hover the (wide) hit area → highlight the whole edge immediately; the
+  // description tooltip waits until the mouse settles (scheduleTip).
+  function onEnter(event, d) {
+    visualFor(d.id).classed('edge-hover', true);
+    scheduleTip(d.description, event.clientX, event.clientY);
+  }
+  function onMove(event, d) {
+    scheduleTip(d.description, event.clientX, event.clientY);
+  }
+  function onLeave(event, d) {
+    visualFor(d.id).classed('edge-hover', false);
+    cancelTip();
+  }
+
+  edgeLayer.selectAll('.edge-hitarea-group')
+    .on('click', select)
+    .on('mouseenter', onEnter)
+    .on('mousemove', onMove)
+    .on('mouseleave', onLeave);
+
+  // The annotation label lives in a separate group (.edge-visual) from the
+  // invisible hit line (.edge-hitarea-group) — often floating off the line
+  // entirely (its phantom-node position) — so mouse events there never bubble
+  // into the hitarea-group's own listeners (siblings, not ancestor/descendant).
+  // Mirror click + hover onto it directly so hovering/clicking the label works
+  // exactly like hovering/clicking the line.
+  edgeLayer.selectAll('.edge-visual').select('text.edge-annotation')
+    .on('click', select)
+    .on('mouseenter', onEnter)
+    .on('mousemove', onMove)
+    .on('mouseleave', onLeave);
 }

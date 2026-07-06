@@ -8,76 +8,123 @@ nodes:
   frontend:
     label: Web frontend
     source: static/
+    description: Vanilla JS + D3 single-page app — renders the graph, drives interaction, and hosts the config panel.
     zone: top-right
     children:
-      mod_app:         { label: App entry,   source: static/app.js }
-      mod_state:       { label: State,        source: static/state.js }
-      mod_constants:   { label: Constants,    source: static/constants.js }
-      mod_geometry:    { label: Geometry,     source: static/geometry.js }
-      mod_lod:         { label: LOD,          source: static/lod.js }
-      mod_render:      { label: Render,        source: static/render.js }
-      mod_simulation:  { label: Simulation,   source: static/simulation.js }
-      mod_code_panel:  { label: Code panel,   source: static/code-panel.js }
-      mod_interaction: { label: Interaction,  source: static/interaction.js }
-      api_client:      { label: API client,   source: static/api.js }
-      stylesheet:      { label: Stylesheet,   source: static/style.css }
-      html_entry:      { label: HTML entry,   source: static/index.html }
+      mod_app:         { label: App entry,     source: static/app.js,           description: "Bootstraps the app, owns the refresh cycle, and wires keyboard + config." }
+      mod_state:       { label: State,          source: static/state.js,         description: "Shared mutable graph/UI state (nodes, edges, engine, modes) via ES live bindings." }
+      mod_constants:   { label: Constants,      source: static/constants.js,     description: "Layout / physics / colour defaults — many are live-tunable from the config panel." }
+      mod_geometry:    { label: Geometry,       source: static/geometry.js,      description: "Coordinate helpers — viewport, zones, edge border endpoints, container geometry." }
+      mod_lod:         { label: LOD,            source: static/lod.js,           description: "Level-of-detail visibility, expand / collapse, and focus edge-exposure." }
+      mod_render:      { label: Render,         source: static/render.js,        description: "SVG rendering — nodes (kinds, symbol glyphs, description captions), edges, containers." }
+      mod_simulation:  { label: Force sim,      source: static/simulation.js,    description: "The d3-force layout engine — charge, links, grouped collision, label forces." }
+      layout_cola:     { label: Cola layout,    source: static/layout-cola.js,   description: "Alternative WebCola constraint engine (layered / radial / stress) with animated transitions." }
+      mod_interaction: { label: Interaction,    source: static/interaction.js,   description: "Drag, hover tooltips, rename / annotate, focus, and the context menu." }
+      mod_code_panel:  { label: Code panel,     source: static/code-panel.js,    description: "File / directory browser that scrolls to and highlights a node's bound symbol." }
+      keybindings:     { label: Keybindings,    source: static/keybindings.js,   description: "Single source of truth for keyboard shortcuts and the generated help bar." }
+      debug:           { label: Force debug,    source: static/debug.js,         description: "Toggleable overlay of the force sim (velocity, collision, targets) for physics tuning." }
+      config_store:    { label: Config store,   source: static/config.js,        description: "Loads and persists the personal dotfile and applies each setting live." }
+      config_schema:   { label: Config schema,  source: static/config-schema.js, description: "Declarative settings list — drives both the panel UI and the validation." }
+      config_panel:    { label: Config panel,   source: static/config-panel.js,  description: "Left-side settings sidebar with LSP-style inline validation." }
+      api_client:      { label: API client,     source: static/api.js,           description: "fetch wrappers for the backend endpoints." }
+      stylesheet:      { label: Stylesheet,     source: static/style.css,        description: "Retro theme via CSS variables, plus panel and node / edge styling." }
+      html_entry:      { label: HTML entry,     source: static/index.html,       description: "Page shell — the SVG canvas, panels, and tooltip containers." }
 
   yaml_store:
-    label: YAML store
+    label: Intent map
     source: vgraphtree.yaml
+    description: The file that contains the actual graph, with all the nodes, labels, descriptions, and edges between them.
     zone: bottom
 
   backend:
     label: Rust backend
     source: vgraphtree-server/
+    description: Axum server — parses the intent map, serves the composed graph and file contents, and persists edits.
     zone: top-left
     children:
       route_handlers:
         label: Route handlers
         source: vgraphtree-server/src/routes/
+        description: HTTP endpoints over the in-memory graph.
         children:
-          save:  { label: Save,  source: vgraphtree-server/src/routes/save.rs }
-          graph: { label: Graph, source: vgraphtree-server/src/routes/graph.rs }
-          edge:  { label: Edge,  source: vgraphtree-server/src/routes/edge.rs }
-          node:  { label: Node,  source: vgraphtree-server/src/routes/node.rs }
-          file:  { label: File,  source: vgraphtree-server/src/routes/file.rs }
-      config_parser: { label: Config parser, source: vgraphtree-server/src/config.rs }
-      graph_types:   { label: Graph types,   source: vgraphtree-server/src/graph.rs }
-      server_entry:  { label: Server entry,  source: vgraphtree-server/src/main.rs }
+          save:         { label: Save,   source: vgraphtree-server/src/routes/save.rs,   description: "Writes the intent + state files (only deviations go to state)." }
+          graph:        { label: Graph,  source: vgraphtree-server/src/routes/graph.rs,  description: "Serves the composed NodeGraph as JSON." }
+          edge:         { label: Edge,   source: vgraphtree-server/src/routes/edge.rs,   description: "Create / patch edges." }
+          node:         { label: Node,   source: vgraphtree-server/src/routes/node.rs,   description: "Create / patch / delete nodes (double-option pin patch)." }
+          file:         { label: File,   source: vgraphtree-server/src/routes/file.rs,   description: "Reads file contents (line range) and directory listings." }
+          reload:       { label: Reload, source: vgraphtree-server/src/routes/reload.rs, description: "Re-parses the intent + state files from disk." }
+          config_route: { label: Config, source: vgraphtree-server/src/routes/config.rs, description: "GET / PUT the personal config dotfile." }
+      config_parser:   { label: Config parser,   source: vgraphtree-server/src/config.rs,          description: "Parses / serializes the intent YAML and composes nested includes." }
+      graph_types:     { label: Graph types,     source: vgraphtree-server/src/graph.rs,           description: "Runtime Node / Edge / NodeGraph types (symbol, description, pins, kinds)." }
+      kinds:           { label: Kinds,           source: vgraphtree-server/src/kinds.rs,           description: "NodeKind, EdgeKind, and SymbolKind enums." }
+      state_file:      { label: State file,      source: vgraphtree-server/src/state.rs,           description: "Loads / saves personal pins and dismissed items (nullable-pin tombstones)." }
+      personal_config: { label: Personal config, source: vgraphtree-server/src/personal_config.rs, description: "Reads / writes the per-project .vgraphtree.config.yaml dotfile." }
+      check_cli:       { label: Check CLI,       source: vgraphtree-server/src/check.rs,           description: "The `vgraphtree check` subcommand — validates a map without serving." }
+      server_entry:    { label: Server entry,    source: vgraphtree-server/src/main.rs,            description: "CLI, routing, state-file application, and static asset serving." }
 
 edges:
   # ─── Cross-system ─────────────────────────────────────────────────────────
-  - { from: frontend, to: backend,    annotation: HTTP fetch API }
-  - { from: backend,  to: yaml_store, annotation: atomic read/write }
+  - { from: frontend, to: backend,    annotation: HTTP fetch API, description: "The frontend fetches /graph, /file, /config, /save and /reload over HTTP; the backend is the single source of truth for the composed graph." }
+  - { from: backend,  to: yaml_store, annotation: parse + serialize }
 
   # ─── Rust backend ─────────────────────────────────────────────────────────
-  - { from: config_parser, to: graph_types,   annotation: produces NodeGraph }
-  - { from: route_handlers, to: graph_types,  annotation: mutates graph }
-  - { from: server_entry, to: config_parser,  annotation: parse on startup }
-  - { from: server_entry, to: route_handlers, annotation: registers handlers }
-  - { from: server_entry, to: graph_types,    annotation: owns NodeGraph }
+  - { from: config_parser, to: graph_types,    annotation: produces NodeGraph }
+  - { from: config_parser, to: kinds,          annotation: infers kinds }
+  - { from: graph_types,   to: kinds,          annotation: Node / Edge kinds }
+  - { from: route_handlers, to: graph_types,   annotation: mutates graph }
+  - { from: server_entry,  to: config_parser,  annotation: compose on startup }
+  - { from: server_entry,  to: route_handlers, annotation: registers handlers }
+  - { from: server_entry,  to: graph_types,    annotation: owns NodeGraph }
+  - { from: server_entry,  to: state_file,     annotation: applies pins }
+  - { from: server_entry,  to: check_cli,      annotation: check subcommand }
+  - { from: check_cli,     to: config_parser,  annotation: validates compose }
+  - { from: reload,        to: config_parser,  annotation: re-composes }
+  - { from: reload,        to: state_file,     annotation: re-applies pins }
+  - { from: save,          to: config_parser,  annotation: serialize intent }
+  - { from: save,          to: state_file,     annotation: writes state }
+  - { from: config_route,  to: personal_config, annotation: read / write dotfile }
 
   # ─── JS module import graph ───────────────────────────────────────────────
   - { from: mod_app, to: api_client,       annotation: fetchGraph / postSave }
   - { from: mod_app, to: mod_state,        annotation: shared mutable state }
   - { from: mod_app, to: mod_lod,          annotation: expand / collapse triggers }
-  - { from: mod_app, to: mod_simulation,   annotation: rebuild on refresh }
+  - { from: mod_app, to: mod_simulation,   annotation: build force layout }
+  - { from: mod_app, to: layout_cola,      annotation: build cola layout }
   - { from: mod_app, to: mod_render,       annotation: initial render + refresh }
   - { from: mod_app, to: mod_interaction,  annotation: wire up event handlers }
   - { from: mod_app, to: mod_code_panel,   annotation: normaliseSource }
+  - { from: mod_app, to: keybindings,      annotation: dispatch + help bar }
+  - { from: mod_app, to: debug,            annotation: toggle overlay }
+  - { from: mod_app, to: config_store,     annotation: load + apply config }
+  - { from: mod_app, to: config_panel,     annotation: render panel }
   - { from: mod_interaction, to: mod_lod,        annotation: expand / collapse calls }
   - { from: mod_interaction, to: mod_render,     annotation: rerenderEdges / updateContainers }
   - { from: mod_interaction, to: mod_simulation, annotation: rebuild after mutation }
-  - { from: mod_interaction, to: mod_code_panel, annotation: open on node click }
+  - { from: mod_interaction, to: layout_cola,    annotation: updateDraggedLabels }
+  - { from: mod_interaction, to: mod_code_panel, annotation: open on dbl-click }
   - { from: mod_interaction, to: api_client,     annotation: patchNode / patchEdge }
   - { from: mod_simulation, to: mod_render,   annotation: "tick: update DOM" }
   - { from: mod_simulation, to: mod_lod,      annotation: visibility + label radius }
   - { from: mod_simulation, to: mod_geometry, annotation: edge endpoints / zones }
+  - { from: mod_simulation, to: debug,        annotation: renderDebug per tick }
+  - { from: layout_cola, to: mod_render,   annotation: rerenderEdges / updateContainers }
+  - { from: layout_cola, to: mod_geometry, annotation: viewport }
+  - { from: layout_cola, to: mod_lod,      annotation: visibility + exposure }
   - { from: mod_render, to: mod_lod,      annotation: isNodeVisible / visibleDescendants }
   - { from: mod_render, to: mod_geometry, annotation: edge endpoints }
   - { from: mod_code_panel, to: api_client,   annotation: fetchFile }
   - { from: mod_code_panel, to: mod_geometry, annotation: getViewportSize }
+  - { from: debug, to: mod_geometry, annotation: overlay geometry }
+  - { from: debug, to: mod_lod,      annotation: visibility }
+  - { from: config_store, to: config_schema,  annotation: schema + validation }
+  - { from: config_store, to: mod_constants,  annotation: setTunable }
+  - { from: config_store, to: mod_state,      annotation: engine / mode setters }
+  - { from: config_schema, to: mod_constants, annotation: default values }
+  - { from: config_panel, to: config_schema,  annotation: renders fields }
+  - { from: config_panel, to: config_store,   annotation: get / set }
+  - { from: keybindings, to: mod_state,       annotation: debugMode }
+
+  # ─── Shared-state live bindings ───────────────────────────────────────────
   - { from: mod_lod, to: mod_state,         annotation: reads / mutates nodes }
   - { from: mod_geometry, to: mod_state,    annotation: SVG viewport ref }
   - { from: mod_render, to: mod_state,      annotation: "live bindings: nodes, edges" }

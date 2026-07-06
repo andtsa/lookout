@@ -227,7 +227,11 @@ async function init() {
   // Render the config panel, and relayout when a non-colour setting changes
   // (colour changes only touch CSS variables, no relayout needed).
   renderConfigPanel(document.getElementById('config-panel'));
-  onConfigChange(field => { if (field.type !== 'color') refreshVisibility(1); });
+  // Relayout only for settings that affect layout; colour / description-mode
+  // changes are pure visual toggles that applyField already handled.
+  onConfigChange(field => {
+    if (['engine', 'colaMode', 'const'].includes(field.target)) refreshVisibility(1);
+  });
 
   // Initial layout via the configured engine.
   if (layoutEngine === 'cola') runColaLayout(1, { mode: colaMode });

@@ -13,29 +13,33 @@ const codePanelBack    = document.getElementById('code-panel-back');
 const codePanelResize  = document.getElementById('code-panel-resize');
 
 let codePanelFileParent = null;  // path to re-open when ↩ is clicked
+let _openSource         = null;  // source currently shown (for dbl-click toggle)
 
 // ─── Panel open / close ───────────────────────────────────────────────────────
 
 export async function openCodePanel(nodeOrPath) {
-  const source = typeof nodeOrPath === 'string' ? nodeOrPath : nodeOrPath.source;
+  const node   = typeof nodeOrPath === 'string' ? null : nodeOrPath;
+  const source = node ? node.source : nodeOrPath;   // node.source is a plain path (symbol split off)
   if (!source && source !== '') return;
+  _openSource = source;
 
-  codePanelPath.textContent  = source;
+  // Show the symbol name in the header when this node points at one.
+  codePanelPath.textContent  = node && node.symbol ? `${source} :: ${node.symbol}` : source;
   codePanelContent.innerHTML = '<pre style="color:var(--text-faint);padding:8px 12px">Loading…</pre>';
   codePanel.classList.add('open');
 
   try {
     const data = await fetchFile(source);
     if (data.type === 'directory') renderDirectoryInPanel(data);
-    else                           renderFileInPanel(data, source);
+    else                           renderFileInPanel(data, source, node);
   } catch (e) {
     codePanelContent.innerHTML =
       `<pre style="color:#fb4934;padding:8px 12px">Error: ${e.message}</pre>`;
   }
 }
 
-function renderFileInPanel(data, path) {
-  codePanelPath.textContent = path;
+function renderFileInPanel(data, path, node) {
+  codePanelPath.textContent = node && node.symbol ? `${path} :: ${node.symbol}` : path;
   const parts = path.replace(/\/+$/, '').split('/');
   parts.pop();
   codePanelFileParent  = parts.join('/');
@@ -49,6 +53,70 @@ function renderFileInPanel(data, path) {
   codePanelContent.innerHTML = '';
   codePanelContent.appendChild(pre);
   if (window.hljs) hljs.highlightElement(code);
+
+  // Symbol node → scroll to and highlight the target line. `line` (1-based) is
+  // authoritative; otherwise search the file for the symbol name.
+  if (node && (node.line || node.symbol)) {
+    const target = node.line || findSymbolLine(data.lines, node.symbol);
+    if (target) highlightLine(code, data.lines, target);
+  }
+}
+
+// ─── Symbol location within a file ─────────────────────────────────────────────
+
+// First 1-based line whose text contains the symbol as a whole word, or null.
+function findSymbolLine(lines, symbol) {
+  if (!symbol) return null;
+  const re = new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  for (let i = 0; i < lines.length; i++) if (re.test(lines[i])) return i + 1;
+  return null;
+}
+
+// Char offset (into lines.join('\n')) of the start of a 1-based line.
+function lineStartOffset(lines, line) {
+  let off = 0;
+  for (let i = 0; i < line - 1; i++) off += lines[i].length + 1; // +1 for the '\n'
+  return off;
+}
+
+// Locate (textNode, offset) for a character offset within a highlighted element.
+// hljs wraps text in spans but preserves textContent, so char offsets still align.
+function offsetToNode(root, charOffset) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let acc = 0, n;
+  while ((n = walker.nextNode())) {
+    const len = n.textContent.length;
+    if (acc + len >= charOffset) return { node: n, offset: charOffset - acc };
+    acc += len;
+  }
+  return null;
+}
+
+// Highlight a 1-based line and scroll it into view. Uses a DOM Range over the
+// line's text to get its real position — robust to line wrapping (pre-wrap) and
+// preserving hljs syntax highlighting.
+function highlightLine(code, lines, line) {
+  const startOff = lineStartOffset(lines, line);
+  const endOff   = startOff + (lines[line - 1] ? lines[line - 1].length : 0);
+  const s = offsetToNode(code, startOff);
+  const e = offsetToNode(code, endOff);
+  if (!s || !e) return;
+
+  const range = document.createRange();
+  range.setStart(s.node, s.offset);
+  range.setEnd(e.node, e.offset);
+  const rect     = range.getBoundingClientRect();
+  const contRect = codePanelContent.getBoundingClientRect();
+  const top      = rect.top - contRect.top + codePanelContent.scrollTop;
+
+  const bar = document.createElement('div');
+  bar.className    = 'code-line-highlight';
+  bar.style.top    = `${top}px`;
+  bar.style.height = `${Math.max(rect.height, 16)}px`;
+  codePanelContent.style.position = 'relative';
+  codePanelContent.appendChild(bar);
+
+  codePanelContent.scrollTop = Math.max(0, top - codePanelContent.clientHeight * 0.35);
 }
 
 function renderDirectoryInPanel(data) {
@@ -177,11 +245,22 @@ function langClass(path) {
 
 // ─── Panel event wiring (runs at import time) ─────────────────────────────────
 
-document.getElementById('code-panel-close').addEventListener('click', () => {
+export function closeCodePanel() {
   codePanel.classList.remove('open');
   codePanelContent.innerHTML = '';
+  _openSource = null;
   svg.node().focus();
-});
+}
+
+// Double-click behaviour: if the panel is already open on this node's source,
+// close it; otherwise open it (so double-clicking a different node switches).
+export function toggleCodePanel(nodeOrPath) {
+  const source = typeof nodeOrPath === 'string' ? nodeOrPath : nodeOrPath.source;
+  if (codePanel.classList.contains('open') && _openSource === source) closeCodePanel();
+  else openCodePanel(nodeOrPath);
+}
+
+document.getElementById('code-panel-close').addEventListener('click', closeCodePanel);
 
 codePanelBack.addEventListener('click', () => {
   if (codePanelFileParent !== null) openCodePanel(codePanelFileParent);
