@@ -94,22 +94,26 @@ defs.append('marker')
   .attr('refX',        8).attr('refY', 0)
   .attr('markerWidth', 6).attr('markerHeight', 6)
   .attr('orient',      'auto')
+  // userSpaceOnUse (not the default 'strokeWidth') keeps the arrowhead's
+  // rendered size fixed regardless of the referencing path's stroke-width —
+  // otherwise a hovered edge's thicker stroke scales the marker up with it.
+  .attr('markerUnits',  'userSpaceOnUse')
   .append('path')
-  .attr('d',    'M0,-4L8,0L0,4')
-  .attr('opacity', 0.6);
-  // Fill is themed via CSS (`#arrow path { fill: var(--accent) }`) so the
-  // arrowhead colour follows the active palette.
+  .attr('d', 'M0,-4L8,0L0,4');
+  // Fill/opacity are themed via CSS (`#arrow path { fill: var(--accent) }`) so
+  // the arrowhead colour follows the active palette and stays fully opaque.
 
 // Highlighted arrowhead for a hovered edge. SVG markers aren't restyled by the
 // CSS class of the element referencing them, so a hovered edge swaps its
 // `marker-end` to this second marker instead (see interaction.js edge hover) —
-// same shape, themed brighter/opaque via CSS (`#arrow-hover path`).
+// same shape/size, themed brighter via CSS (`#arrow-hover path`).
 defs.append('marker')
   .attr('id',          'arrow-hover')
   .attr('viewBox',     '0 -4 8 8')
   .attr('refX',        8).attr('refY', 0)
   .attr('markerWidth', 6).attr('markerHeight', 6)
   .attr('orient',      'auto')
+  .attr('markerUnits',  'userSpaceOnUse')
   .append('path')
   .attr('d', 'M0,-4L8,0L0,4');
 

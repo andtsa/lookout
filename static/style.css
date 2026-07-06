@@ -234,9 +234,11 @@ body {
   opacity: 0.6;
 }
 
-/* Arrowhead marker — themed via CSS so it follows --accent */
+/* Arrowhead marker — themed via CSS so it follows --accent. Always fully
+   opaque (the edge line itself is what dims/fades, not the arrowhead). */
 #arrow path {
   fill: var(--accent);
+  opacity: 1;
 }
 /* Hovered-edge arrowhead (a separate marker — see interaction.js edge hover,
    SVG markers ignore the CSS class of the element referencing them) — fully
