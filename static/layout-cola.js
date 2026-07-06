@@ -33,18 +33,54 @@ import {
   NODE_W, NODE_H, NODE_W_SM, NODE_H_SM,
   COLA_NODE_PAD, COLA_LINK_LENGTH, COLA_LINK_LENGTH_JACCARD, COLA_FLOW_GAP, COLA_ITERS,
   COLA_LABEL_CHAR_W, COLA_LABEL_H, COLA_LABEL_PAD, COLA_LABEL_MID_BAND, COLA_LABEL_OFFSET,
-  COLA_RADIAL_SPAN, SPARSE_EDGE_RATIO,
+  COLA_RADIAL_SPAN, SPARSE_EDGE_RATIO, COLA_ANIM_MS_FULL, COLA_ANIM_MS_GENTLE,
 } from './constants.js';
 
-// A stand-in for the d3 force simulation. Cola owns positions synchronously, so
-// these are mostly no-ops — they exist purely so callers that poke `simulation`
+// In-flight layout tween (d3.timer). Cola solves synchronously to target
+// positions; this animates the nodes/labels from where they are to those targets
+// so a re-layout glides instead of teleporting. A new solve interrupts the old
+// tween (start-from-wherever-we-are), so rapid re-layouts don't stack or snap.
+let _anim = null;
+function stopAnim() { if (_anim) { _anim.stop(); _anim = null; } }
+
+// Tween real nodes (vis[i] → targets[i]) and labels (labelNodes[eid] → labelTargets)
+// over `dur` ms, re-rendering edges/containers each frame so everything moves
+// together. Positions reach the exact targets on completion.
+function animateTo(vis, targets, labelTargets, dur) {
+  stopAnim();
+  const from    = vis.map(n => ({ x: n.x, y: n.y }));
+  const labFrom = new Map();
+  for (const [eid, p] of labelTargets) {
+    const ln = labelNodes[eid];
+    labFrom.set(eid, (ln && ln.x != null) ? { x: ln.x, y: ln.y } : { x: p.x, y: p.y });
+  }
+  const apply = (e) => {
+    vis.forEach((n, i) => { n.x = from[i].x + (targets[i].x - from[i].x) * e; n.y = from[i].y + (targets[i].y - from[i].y) * e; });
+    for (const [eid, p] of labelTargets) {
+      const ln = labelNodes[eid]; if (!ln) continue;
+      const f = labFrom.get(eid);
+      ln.x = f.x + (p.x - f.x) * e; ln.y = f.y + (p.y - f.y) * e; ln._placed = true;
+    }
+    nodeLayer.selectAll('.node').attr('transform', d => `translate(${d.x},${d.y})`);
+    updateContainers();
+    rerenderEdges();
+  };
+  _anim = d3.timer(elapsed => {
+    const k = Math.min(1, elapsed / dur);
+    apply(d3.easeCubicOut(k));
+    if (k >= 1) stopAnim();
+  });
+}
+
+// A stand-in for the d3 force simulation. Cola owns positions via the tween above,
+// so these are mostly no-ops — they exist purely so callers that poke `simulation`
 // (interaction.js drag reheat, debug.js HUD) don't need to know the engine.
 function colaController(vis) {
   const ctrl = {
     alpha: () => 0,
     alphaTarget: () => ctrl,   // chainable no-op: `.alphaTarget(x).restart()`
     restart: () => ctrl,
-    stop: () => ctrl,
+    stop: () => { stopAnim(); return ctrl; },
     tick: () => ctrl,
     nodes: () => vis,
     force: () => null,
@@ -54,6 +90,26 @@ function colaController(vis) {
 }
 
 const boxOf = n => (n.level >= 1 ? { w: NODE_W_SM, h: NODE_H_SM } : { w: NODE_W, h: NODE_H });
+
+// Recompute Cola-placed label positions from the CURRENT endpoint positions,
+// using each label's stored along-edge parameter (_t) and the standard perpendicular
+// offset. Called during a drag so labels follow their edges (the Cola engine has no
+// ticking sim to pull them along, unlike the force engine). Only touches labels Cola
+// placed (those with _t); pass the moved node ids to limit work to affected edges.
+export function updateDraggedLabels(movedIds) {
+  for (const eid of Object.keys(labelNodes)) {
+    const ln = labelNodes[eid];
+    if (ln._t == null) continue;
+    const e = edges[eid];
+    if (!e || (movedIds && !movedIds.has(e.from) && !movedIds.has(e.to))) continue;
+    const a = nodes[e.from], b = nodes[e.to];
+    if (!a || !b) continue;
+    const abx = b.x - a.x, aby = b.y - a.y;
+    const len = Math.sqrt(abx * abx + aby * aby) || 1;
+    ln.x = a.x + ln._t * abx + (-aby / len) * COLA_LABEL_OFFSET;
+    ln.y = a.y + ln._t * aby + (abx / len) * COLA_LABEL_OFFSET;
+  }
+}
 
 // Polar remap of a solved layer layout: y (layer depth) → radius, x → angle, so
 // the root layer sits near the centre and deeper layers radiate outward. rBase
@@ -80,6 +136,7 @@ function polarRemap(pts, center) {
 //   mode  — 'layered' | 'radial' | 'stress'.
 export function runColaLayout(alpha = 1, { mode = 'layered' } = {}) {
   if (simulation) simulation.stop();
+  stopAnim(); // interrupt any prior tween (e.g. previous engine was force)
 
   const vis = Object.values(nodes).filter(isNodeVisible);
   if (vis.length === 0) { setSimulation(colaController(vis)); return; }
@@ -153,38 +210,36 @@ export function runColaLayout(alpha = 1, { mode = 'layered' } = {}) {
   // labels stay beside their edges after the transform).
   if (mode === 'radial') polarRemap(cNodes, { x: w / 2, y: h / 2 });
 
-  // Apply solved positions to the shared objects immediately (correctness is
-  // independent of any animation, which is rAF-driven and throttled when hidden).
-  vis.forEach((n, i) => {
-    n.x = (n.pin && mode !== 'radial') ? n.pin.x : cNodes[i].x;
-    n.y = (n.pin && mode !== 'radial') ? n.pin.y : cNodes[i].y;
-  });
-  // Snap each label onto its edge, near the midpoint. The solver placed the label
-  // dummy off to a clear spot; we project that position onto the edge segment (so
-  // the label sits ON its edge), clamp the along-edge parameter to a band around
-  // the midpoint, and nudge it slightly perpendicular so the line doesn't cut
-  // through the text. Projecting the *solved* point (not just using t=0.5) keeps
-  // labels on crossing edges from stacking on the same midpoint.
+  // Target positions for real nodes — computed, NOT written to node.x/y yet, so
+  // animateTo() can tween from the current positions to these.
+  const targets = vis.map((n, i) =>
+    (n.pin && mode !== 'radial') ? { x: n.pin.x, y: n.pin.y } : { x: cNodes[i].x, y: cNodes[i].y });
+  const tpos = new Map(vis.map((n, i) => [n.id, targets[i]]));
+
+  // Target label positions: snap each onto its edge, near the midpoint, using the
+  // TARGET node positions. The solver placed the label dummy off to a clear spot;
+  // we project that onto the edge segment (so the label sits ON its edge), clamp
+  // the along-edge parameter to a band around the midpoint, and nudge it slightly
+  // perpendicular so the line doesn't cut through the text. Projecting the *solved*
+  // point (not just t=0.5) keeps labels on crossing edges from stacking.
+  const labelTargets = new Map();
   const half = COLA_LABEL_MID_BAND / 2;
   for (const [eid, li] of labelIndex) {
-    const ln = labelNodes[eid];
-    const e  = edges[eid];
-    const a  = e && nodes[e.from], b = e && nodes[e.to];
-    if (!ln || !a || !b) continue;
+    const e = edges[eid];
+    const a = e && tpos.get(e.from), b = e && tpos.get(e.to);
+    if (!a || !b) continue;
     const abx = b.x - a.x, aby = b.y - a.y;
     const len2 = abx * abx + aby * aby || 1;
     let t = ((cNodes[li].x - a.x) * abx + (cNodes[li].y - a.y) * aby) / len2;
     t = Math.max(0.5 - half, Math.min(0.5 + half, t));
     const len = Math.sqrt(len2);
     const nx = -aby / len, ny = abx / len; // unit normal to the edge
-    ln.x = a.x + t * abx + nx * COLA_LABEL_OFFSET;
-    ln.y = a.y + t * aby + ny * COLA_LABEL_OFFSET;
-    ln._placed = true;
+    labelTargets.set(eid, { x: a.x + t * abx + nx * COLA_LABEL_OFFSET, y: a.y + t * aby + ny * COLA_LABEL_OFFSET });
+    labelNodes[eid]._t = t; // remember along-edge position so drag can follow the edge
   }
 
-  nodeLayer.selectAll('.node').attr('transform', d => `translate(${d.x},${d.y})`);
-  updateContainers();
-  rerenderEdges();
+  // Glide from the current layout to the solved one.
+  animateTo(vis, targets, labelTargets, alpha >= 1 ? COLA_ANIM_MS_FULL : COLA_ANIM_MS_GENTLE);
 
   setSimulation(colaController(vis));
 }

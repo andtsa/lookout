@@ -4,10 +4,11 @@
 // app.js after renderNodes / renderEdges.
 
 import {
-  nodes, edges, labelNodes, simulation,
+  nodes, edges, labelNodes, simulation, layoutEngine,
   nodeLayer, edgeLayer, svg,
   scrollAccum, setHoveredNodeId, setSelectedEdgeId, setDirty, toggleFocusedNode,
 } from './state.js';
+import { updateDraggedLabels } from './layout-cola.js';
 import {
   visibleDescendants, isLeafNode, flashLeaf, getVisibleProxy,
   expandNode, collapseDeepestIn,
@@ -57,28 +58,27 @@ function dragged(event, d) {
   d.x  = event.x;
   d.y  = event.y;
 
-  // Render the dragged node immediately. Under d3-force the tick handler would
-  // also do this, but the Cola engine doesn't tick continuously, so a leaf drag
-  // would otherwise not move until the next relayout.
-  nodeLayer.selectAll('.node').filter(n => n.id === d.id)
-    .attr('transform', `translate(${d.x},${d.y})`);
-  rerenderEdges();
-
-  // Move the whole expanded cluster together
+  // Move the whole expanded cluster together with the dragged container.
+  const moved = new Set([d.id]);
   if (d.expandedDepth > 0) {
-    const desc    = visibleDescendants(d);
-    const descIds = new Set(desc.map(c => c.id));
-    for (const c of desc) {
+    for (const c of visibleDescendants(d)) {
       c.x += dx; c.y += dy;
       c.fx = c.x; c.fy = c.y;
+      moved.add(c.id);
     }
-    nodeLayer.selectAll('.node').each(function(n) {
-      if (n.id === d.id || descIds.has(n.id))
-        d3.select(this).attr('transform', `translate(${n.x},${n.y})`);
-    });
-    updateContainers();
-    rerenderEdges();
   }
+
+  // Render the moved node(s) immediately. Under d3-force the tick handler would
+  // also do this, but the Cola engine doesn't tick continuously, so a drag would
+  // otherwise not move until the next relayout.
+  nodeLayer.selectAll('.node').each(function(n) {
+    if (moved.has(n.id)) d3.select(this).attr('transform', `translate(${n.x},${n.y})`);
+  });
+  // Under Cola, no sim pulls the edge labels along, so recompute their positions
+  // from the moved endpoints (the force engine's label-pull handles this itself).
+  if (layoutEngine === 'cola') updateDraggedLabels(moved);
+  if (d.expandedDepth > 0) updateContainers();
+  rerenderEdges();
 }
 
 function dragEnded(event, d) {

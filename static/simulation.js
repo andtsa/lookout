@@ -14,7 +14,7 @@ import {
   LINK_DIST_PARENT, LINK_DIST_EDGE,
   LINK_STRENGTH_PARENT, LINK_STRENGTH_EDGE, LINK_STRENGTH_UNEXPOSED,
   COLLISION_RADIUS, COLLISION_ITERATIONS, VELOCITY_DECAY, COLLIDE_STRENGTH,
-  CENTER_STRENGTH, LABEL_PULL_STRENGTH, ALPHA_DECAY,
+  CENTER_STRENGTH, LABEL_PULL_STRENGTH, LABEL_DECLUTTER_STRENGTH, ALPHA_DECAY,
   ZONE_STRENGTH, PARENT_PIN_STRENGTH, CENTER_PAD, CENTER_FIT_MARGIN, SPARSE_EDGE_RATIO,
 } from './constants.js';
 
@@ -174,6 +174,34 @@ export function buildSimulation(alpha = 1) {
         if (!pts) continue;
         ln.vx += ((pts.x1 + pts.x2) / 2 - ln.x) * LABEL_PULL_STRENGTH;
         ln.vy += ((pts.y1 + pts.y2) / 2 - ln.y) * LABEL_PULL_STRENGTH;
+      }
+    })
+    // Push labels out of container boxes they don't belong to. The label-pull
+    // above can drop a label onto an unrelated container's box; here we shove it
+    // back out along the radius of that container's circle. A label whose edge is
+    // internal to the container (an endpoint is a descendant) belongs inside and
+    // is left alone. Only labels move — no feedback into container size.
+    .force('label-declutter', () => {
+      const containers = simNodes.filter(n => n.expandedDepth > 0 && n.containerBounds);
+      if (!containers.length) return;
+      const under = (nodeId, contId) => {
+        let n = nodes[nodeId];
+        while (n) { if (n.id === contId) return true; n = n.parent ? nodes[n.parent] : null; }
+        return false;
+      };
+      for (const ln of visLabelNodes) {
+        const e = edges[ln.edgeId];
+        for (const c of containers) {
+          if (under(e.from, c.id) || under(e.to, c.id)) continue; // belongs inside
+          const cc = containerCenter(c.containerBounds);
+          const rr = containerRadius(c.containerBounds) + labelRadius(ln);
+          let dx = ln.x - cc.x, dy = ln.y - cc.y, dist = Math.hypot(dx, dy);
+          if (dist >= rr) continue;
+          if (dist < 1e-6) { dx = 1; dy = 0; dist = 1; }
+          const push = (rr - dist) * LABEL_DECLUTTER_STRENGTH;
+          ln.vx += (dx / dist) * push;
+          ln.vy += (dy / dist) * push;
+        }
       }
     })
     .velocityDecay(VELOCITY_DECAY)

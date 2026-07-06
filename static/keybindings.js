@@ -52,6 +52,11 @@ export const KEY_BINDINGS = [
     run: (e, cx) => { if (e.key === 'c' || e.key === 'C') cx.collapseAll(); else cx.expandAll(); },
   },
   {
+    combo: 'P', desc: 'config panel',
+    match: e => (e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey,
+    run: (e, cx) => cx.toggleConfigPanel(),
+  },
+  {
     combo: 'L', desc: 'layout engine (force/cola)',
     match: e => (e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey && !e.altKey,
     run: (e, cx) => cx.toggleEngine(),

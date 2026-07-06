@@ -14,6 +14,8 @@
   --teal:           #83a598;  /* gruvbox blue — level-1 nodes (cool contrast) */
   --gold:           #fabd2f;  /* yellow — pinned / LOD target */
   --focus:          #d3869b;  /* purple — focused node ring */
+  --edge-dim:       #fe8019;  /* faded / unfocused edges (config: Faded edge) */
+  --edge-label:     #a89984;  /* edge annotation text     (config: Edge label) */
   --text-primary:   #ebdbb2;  /* cream */
   --text-secondary: #d5c4a1;
   --text-dim:       #a89984;
@@ -26,6 +28,28 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-dim) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-dim);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
@@ -174,8 +198,9 @@ body {
   transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Dim / unfocused edges — dashed stroke, very low opacity */
+/* Dim / unfocused edges — dashed stroke, own (faded) colour, very low opacity */
 .edge-visual.edge-dim .edge {
+  stroke: var(--edge-dim);
   stroke-dasharray: 4 4;
   opacity: 1; /* opacity is on the group, not the line */
 }
@@ -193,7 +218,7 @@ body {
 }
 
 .edge-annotation {
-  fill: var(--text-dim);
+  fill: var(--edge-label);
   font-size: 10px;
   font-family: monospace;
   pointer-events: all;   /* clickable to edit — it can float away from the line */
@@ -370,24 +395,24 @@ body {
   overflow: auto;
   flex: 1;
   padding: 8px 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-dim) transparent;
+  /* scrollbar-width: thin; */
+  /* scrollbar-color: var(--border-dim) transparent; */
 }
 
-#code-panel-content::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-#code-panel-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-#code-panel-content::-webkit-scrollbar-thumb {
-  background: var(--border-dim);
-  border-radius: 3px;
-}
-#code-panel-content::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+/* #code-panel-content::-webkit-scrollbar { */
+/*   width: 6px; */
+/*   height: 6px; */
+/* } */
+/* #code-panel-content::-webkit-scrollbar-track { */
+/*   background: transparent; */
+/* } */
+/* #code-panel-content::-webkit-scrollbar-thumb { */
+/*   background: var(--border-dim); */
+/*   border-radius: 3px; */
+/* } */
+/* #code-panel-content::-webkit-scrollbar-thumb:hover { */
+/*   background: var(--text-muted); */
+/* } */
 
 #code-panel pre {
   font-family: monospace;
@@ -647,3 +672,48 @@ body {
   stroke-width: 2px;
   opacity: 1;
 }
+
+/* ── Config panel (left sidebar) ─────────────────────────────────────────────
+   Rendered from the schema by config-panel.js. Validation shows an LSP-style
+   red wavy underline (SVG data-URI) + a hint under the offending field. */
+#config-panel {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: 266px; z-index: 40;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font: 12px/1.4 ui-monospace, monospace;
+  overflow-y: auto;
+  padding: 12px 12px 28px;
+  transition: transform .18s ease;
+}
+#config-panel.hidden { transform: translateX(-100%); }
+.cfg-header {
+  font-size: 13px; color: var(--gold);
+  text-transform: uppercase; letter-spacing: .1em; margin-bottom: 12px;
+}
+.cfg-section { margin-bottom: 14px; }
+.cfg-section-title {
+  color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  border-bottom: 1px solid var(--border-subtle); padding-bottom: 3px; margin-bottom: 8px;
+}
+.cfg-row { margin-bottom: 9px; }
+.cfg-label { display: block; color: var(--text-secondary); margin-bottom: 3px; }
+.cfg-controls { display: flex; align-items: center; gap: 6px; }
+.cfg-input {
+  flex: 1; min-width: 0;
+  background: var(--bg-deep); color: var(--text-primary);
+  border: 1px solid var(--border-dim); border-radius: 3px;
+  padding: 3px 6px; font: 12px ui-monospace, monospace;
+}
+.cfg-input:focus { outline: none; border-color: var(--accent); }
+select.cfg-input { cursor: pointer; }
+.cfg-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--border-dim); flex: 0 0 auto; }
+.cfg-input.cfg-invalid {
+  border-color: #fb4934;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='4'%3E%3Cpath d='M0 3 Q1.5 0 3 3 T6 3' stroke='%23fb4934' fill='none'/%3E%3C/svg%3E");
+  background-repeat: repeat-x; background-position: left bottom; background-size: 6px 4px;
+}
+.cfg-hint { color: #fb4934; font-size: 11px; margin-top: 2px; }
+.cfg-hint:empty { display: none; }
+.cfg-foot { margin-top: 12px; color: var(--text-muted); font-size: 10px; word-break: break-all; }
