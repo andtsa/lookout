@@ -2,12 +2,12 @@
 // Creates and updates SVG elements.  Does NOT set up event handlers (those live
 // in interaction.js / app.js) and does NOT call buildSimulation.
 
-import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, CONTAINER_PAD, CONTAINER_LABEL_H, DIM_EDGE_OPACITY, EDGE_PARALLEL_GAP } from './constants.js';
+import { CONTAINER_PAD, CONTAINER_LABEL_H, DIM_EDGE_OPACITY, EDGE_PARALLEL_GAP } from './constants.js';
 import {
   nodes, edges, labelNodes, nodeLayer, edgeLayer, zoom, svg,
-  parentDisplayMode, focusedNodeIds,
+  parentDisplayMode, focusedNodeIds, labelDeclutter,
 } from './state.js';
-import { getEdgeEndpoints } from './geometry.js';
+import { getEdgeEndpoints, measureNodeBox } from './geometry.js';
 import { isNodeVisible, visibleDescendants, getVisibleProxy, isEdgeExposed } from './lod.js';
 
 // Symbol-kind → corner-badge glyph. Colour comes from the `symkind-*` CSS class;
@@ -22,13 +22,17 @@ const SYM_GLYPH = {
   module: 'M', type: 'Y', macro: '!',
 };
 const glyphFor = k => (k ? (SYM_GLYPH[k] || k[0].toUpperCase()) : '');
-const glyphX   = d => -(d.level >= 1 ? NODE_W_SM : NODE_W) / 2 + 10;
-const glyphY   = d => -(d.level >= 1 ? NODE_H_SM : NODE_H) / 2 + 10;
+// Positions below all read the node's OWN measured box (d.w/d.h — see
+// measureNodeBox in geometry.js), not a fixed size, so they track a node's
+// text-fit width. renderNodes() / resizeNodeBox() guarantee d.w/d.h are set
+// before these run.
+const glyphX   = d => -d.w / 2 + 10;
+const glyphY   = d => -d.h / 2 + 10;
 
 // Inline description caption (shown under the node in 'inline' mode). Truncated
 // so it stays a single readable line; the full text is available on hover.
 const descCaption = s => (s ? (s.length > 42 ? s.slice(0, 41) + '…' : s) : '');
-const descY = d => (d.level >= 1 ? NODE_H_SM : NODE_H) / 2 + 11;
+const descY = d => d.h / 2 + 11;
 
 // ─── Node rendering ───────────────────────────────────────────────────────────
 // Renders ALL nodes at startup (invisible ones at opacity 0).
@@ -37,6 +41,9 @@ const descY = d => (d.level >= 1 ? NODE_H_SM : NODE_H) / 2 + 11;
 export function renderNodes() {
   // Sort parents before children — later DOM position = higher z-index
   const nodeList = Object.values(nodes).sort((a, b) => a.level - b.level);
+  // Every node's box must be sized (text-fit width) before anything below reads
+  // d.w/d.h — a rename re-measures just that one node (see resizeNodeBox).
+  for (const n of nodeList) measureNodeBox(n);
 
   const sel = nodeLayer.selectAll('.node').data(nodeList, d => d.id);
 
@@ -50,10 +57,10 @@ export function renderNodes() {
 
   enter.append('rect')
     .attr('class',  'node-rect')
-    .attr('x',      d => -(d.level >= 1 ? NODE_W_SM : NODE_W) / 2)
-    .attr('y',      d => -(d.level >= 1 ? NODE_H_SM : NODE_H) / 2)
-    .attr('width',  d =>  (d.level >= 1 ? NODE_W_SM : NODE_W))
-    .attr('height', d =>  (d.level >= 1 ? NODE_H_SM : NODE_H))
+    .attr('x',      d => -d.w / 2)
+    .attr('y',      d => -d.h / 2)
+    .attr('width',  d =>  d.w)
+    .attr('height', d =>  d.h)
     .attr('rx', 6);
 
   enter.append('rect').attr('class', 'container-rect');
@@ -86,6 +93,19 @@ export function renderNodes() {
   sel.exit().remove();
 }
 
+// Re-measure and resize ONE node's box in place — for a label rename, which
+// happens after renderNodes() already built the DOM (no re-enter/exit), so the
+// rect/glyph/caption attributes need updating directly rather than re-running
+// the full enter/merge above.
+export function resizeNodeBox(node) {
+  measureNodeBox(node);
+  const el = nodeLayer.select(`[id="node-${node.id}"]`);
+  el.select('.node-rect').attr('x', -node.w / 2).attr('width', node.w);
+  el.select('.node-glyph-bg').attr('cx', glyphX(node)).attr('cy', glyphY(node));
+  el.select('.node-glyph').attr('x', glyphX(node)).attr('y', glyphY(node));
+  el.select('.node-desc').attr('y', descY(node));
+}
+
 // ─── Edge rendering ───────────────────────────────────────────────────────────
 
 export function renderEdges() {
@@ -99,10 +119,13 @@ export function renderEdges() {
     .append('path').attr('class', 'edge-hitarea');
   hitSel.exit().remove();
 
-  // Visible edge paths + annotation text
+  // Visible edge paths + annotation text. The bg rect is appended BEFORE the
+  // text so it paints underneath it; it's sized every tick in rerenderEdges but
+  // only made visible (via CSS opacity) while the edge is hovered.
   const edgeSel = edgeLayer.selectAll('.edge-visual').data(edgeList, d => d.id);
   const edgeEnter = edgeSel.enter().append('g').attr('class', 'edge-visual');
   edgeEnter.append('path').attr('class', 'edge').attr('marker-end', 'url(#arrow)');
+  edgeEnter.append('rect').attr('class', 'edge-annotation-bg');
   edgeEnter.append('text').attr('class', 'edge-annotation');
   edgeSel.exit().remove();
 
@@ -169,10 +192,54 @@ function curveGeom(pts, spread) {
   };
 }
 
+// ─── Label declutter ──────────────────────────────────────────────────────────
+// Nudge an edge label off any visible leaf node it overlaps, using the minimal
+// axis-aligned translation, with a few relaxation passes for multiple obstacles.
+// The edge's own endpoint nodes are excluded (a short edge's label shouldn't be
+// shoved off its own nodes). Best-effort — a label boxed in on all sides just
+// settles. `boxes` is a precomputed list of visible leaf-node half-extent boxes.
+// (Since a node ON the line can't be avoided while keeping the label on the line,
+// this deliberately trades label-on-edge for label-off-node.)
+const LABEL_CHAR_W = 6;   // px per annotation char (10px monospace, approx)
+const LABEL_HALF_H = 7;   // half label height incl. small pad
+const LABEL_BG_PAD_X = 4; // extra horizontal padding for the hover background chip
+const LABEL_BG_PAD_Y = 2; // extra vertical padding for the hover background chip
+
+function declutterLabel(tx, ty, textLen, boxes, fromId, toId) {
+  const hw = (textLen * LABEL_CHAR_W) / 2 + 2;
+  let cx = tx, cy = ty - 4; // baseline ty → box centre sits ~4px above
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    for (const b of boxes) {
+      if (b.id === fromId || b.id === toId) continue;
+      const ox = (hw + b.hw) - Math.abs(cx - b.cx);
+      const oy = (LABEL_HALF_H + b.hh) - Math.abs(cy - b.cy);
+      if (ox <= 0 || oy <= 0) continue; // separated on some axis → no overlap
+      if (oy <= ox) cy += (cy <= b.cy ? -oy : oy); // push along the shallower axis
+      else          cx += (cx <= b.cx ? -ox : ox);
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return { x: cx, y: cy + 4 };
+}
+
 // ─── Edge geometry update (called every simulation tick) ──────────────────────
 
 export function rerenderEdges() {
   const spreadMap = computeParallelSpread();
+
+  // Visible leaf-node boxes — used to keep exposed edge labels off nodes the edge
+  // passes near/over (declutterLabel below). Skipped entirely when the declutter
+  // toggle is off. Uses each node's own text-fit box (.w/.h — set by renderNodes/
+  // resizeNodeBox before this ever runs).
+  const nodeBoxes = [];
+  if (labelDeclutter) {
+    for (const n of Object.values(nodes)) {
+      if (n.expandedDepth > 0 || !isNodeVisible(n) || !n.w) continue;
+      nodeBoxes.push({ id: n.id, cx: n.x, cy: n.y, hw: n.w / 2, hh: n.h / 2 });
+    }
+  }
 
   edgeLayer.selectAll('.edge-visual').each(function(d) {
     const fromProxy = getVisibleProxy(d.from);
@@ -198,11 +265,30 @@ export function rerenderEdges() {
     // position, falling back to the midpoint.
     const ln = labelNodes[d.id];
     const mx = (pts.x1 + pts.x2) / 2, my = (pts.y1 + pts.y2) / 2;
-    const tx = info.parallel ? mx : (ln && ln._placed) ? ln.x : mx;
-    const ty = info.parallel ? my + info.dy : (ln && ln._placed) ? ln.y : my - 6;
+    let tx = info.parallel ? mx : (ln && ln._placed) ? ln.x : mx;
+    let ty = info.parallel ? my + info.dy : (ln && ln._placed) ? ln.y : my - 6;
+    // Keep the shown label off any node the edge passes near/over (when enabled).
+    if (labelDeclutter && exposed && d.annotation) {
+      const adj = declutterLabel(tx, ty, d.annotation.length, nodeBoxes, fromProxy.id, toProxy.id);
+      tx = adj.x; ty = adj.y;
+    }
+    const shownText = exposed ? (d.annotation || '') : '';
     el.select('text.edge-annotation')
       .attr('x', tx).attr('y', ty).attr('text-anchor', 'middle')
-      .text(exposed ? (d.annotation || '') : '');
+      .text(shownText);
+
+    // Highlight chip behind the label — only actually painted while hovered
+    // (CSS opacity on .edge-hover), but sized/positioned every tick so it's
+    // ready the instant hover starts. Zero width when there's no shown text,
+    // so nothing appears even if hover CSS were somehow applied without one.
+    const bw = shownText ? shownText.length * LABEL_CHAR_W + LABEL_BG_PAD_X * 2 : 0;
+    const bh = LABEL_HALF_H * 2 + LABEL_BG_PAD_Y * 2;
+    el.select('rect.edge-annotation-bg')
+      .attr('x', tx - bw / 2)
+      .attr('y', ty - 4 - LABEL_HALF_H - LABEL_BG_PAD_Y)
+      .attr('width', bw)
+      .attr('height', bh)
+      .attr('rx', 3);
   });
 
   edgeLayer.selectAll('.edge-hitarea-group').each(function(d) {
@@ -269,8 +355,7 @@ export function updateContainers() {
           maxY: c.containerBounds.y + c.containerBounds.h - d.y,
         };
       }
-      const cw = (c.level >= 1 ? NODE_W_SM : NODE_W) / 2;
-      const ch = (c.level >= 1 ? NODE_H_SM : NODE_H) / 2;
+      const cw = c.w / 2, ch = c.h / 2; // own text-fit box, not a fixed size
       return {
         minX: c.x - d.x - cw, maxX: c.x - d.x + cw,
         minY: c.y - d.y - ch, maxY: c.y - d.y + ch,

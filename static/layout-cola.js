@@ -30,7 +30,6 @@ import { getViewportSize } from './geometry.js';
 import { isNodeVisible, isEdgeExposed } from './lod.js';
 import { rerenderEdges, updateContainers } from './render.js';
 import {
-  NODE_W, NODE_H, NODE_W_SM, NODE_H_SM,
   COLA_NODE_PAD, COLA_LINK_LENGTH, COLA_LINK_LENGTH_JACCARD, COLA_FLOW_GAP, COLA_ITERS,
   COLA_LABEL_CHAR_W, COLA_LABEL_H, COLA_LABEL_PAD, COLA_LABEL_MID_BAND, COLA_LABEL_OFFSET,
   COLA_RADIAL_SPAN, SPARSE_EDGE_RATIO, COLA_ANIM_MS_FULL, COLA_ANIM_MS_GENTLE,
@@ -89,7 +88,10 @@ function colaController(vis) {
   return ctrl;
 }
 
-const boxOf = n => (n.level >= 1 ? { w: NODE_W_SM, h: NODE_H_SM } : { w: NODE_W, h: NODE_H });
+// The node's own text-fit box (set by renderNodes/resizeNodeBox before any
+// layout ever runs — see geometry.js measureNodeBox), NOT a fixed size, so
+// Cola's avoidOverlaps respects each node's real width.
+const boxOf = n => ({ w: n.w, h: n.h });
 
 // Recompute Cola-placed label positions from the CURRENT endpoint positions,
 // using each label's stored along-edge parameter (_t) and the standard perpendicular

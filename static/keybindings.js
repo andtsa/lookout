@@ -20,57 +20,62 @@ import { debugMode } from './state.js';
 //   run(e, cx)  action; cx is the context object from app.js
 export const KEY_BINDINGS = [
   {
-    combo: 'Ctrl+S', desc: 'save', whileTyping: true,
+    combo: 'Ctrl/Cmd+S', desc: 'save', whileTyping: true,
     match: e => (e.ctrlKey || e.metaKey) && e.key === 's',
     run: (e, cx) => { e.preventDefault(); if (cx.getDirty()) cx.save(); },
   },
   {
-    combo: 'Esc', desc: 'clear focus',
+    combo: 'Esc', desc: 'clear node focuses',
     match: e => e.key === 'Escape',
     run: (e, cx) => cx.clearFocus(),
   },
   {
-    combo: 'A', desc: 'ghost/container',
+    combo: 'A', desc: 'toggle between "ghost" and "container" styles for parent nodes',
     match: e => (e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey && !e.altKey,
     run: (e, cx) => cx.toggleDisplayMode(),
   },
   {
-    combo: 'D', desc: 'force debug',
+    combo: 'D', desc: 'toggle force debug (shows collision boxes)',
     match: e => (e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey,
     run: (e, cx) => cx.toggleDebug(),
   },
   {
-    combo: '+/−', desc: 'zoom',
+    combo: '+/−', desc: 'zoom canvas',
     match: e => (e.key === '+' || e.key === '=' || e.key === '-') && !e.ctrlKey && !e.metaKey,
     run: (e, cx) => cx.zoomBy(e.key === '-' ? 1 / 1.3 : 1.3),
   },
   {
-    combo: 'Shift+E/C', desc: 'expand/collapse all',
+    combo: 'Shift+E/C', desc: 'expand/collapse all parent nodes',
     // Allow AltGr (Ctrl+Alt on Windows) but block plain Ctrl/Cmd combos.
     match: e => (e.key === 'e' || e.key === 'E' || e.key === 'c' || e.key === 'C')
       && e.shiftKey && !e.metaKey && !(e.ctrlKey && !e.altKey),
     run: (e, cx) => { if (e.key === 'c' || e.key === 'C') cx.collapseAll(); else cx.expandAll(); },
   },
   {
-    combo: 'E/C', desc: 'expand/collapse hovered',
+    combo: 'E/C', desc: 'expand/collapse hovered node',
     match: e => (e.key === 'e' || e.key === 'E' || e.key === 'c' || e.key === 'C')
       && !e.shiftKey && !e.metaKey && !(e.ctrlKey && !e.altKey),
     run: (e, cx) => { if (e.key === 'c' || e.key === 'C') cx.collapseHovered(); else cx.expandHovered(); },
   },
   {
-    combo: 'P', desc: 'config panel',
+    combo: 'P', desc: 'open config panel',
     match: e => (e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey,
     run: (e, cx) => cx.toggleConfigPanel(),
   },
   {
-    combo: 'L', desc: 'layout engine (force/cola)',
+    combo: 'L', desc: 'toggle layout engine (force/cola)',
     match: e => (e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey && !e.altKey,
     run: (e, cx) => cx.toggleEngine(),
   },
   {
-    combo: 'K', desc: 'cola mode (layered/radial/stress)',
+    combo: 'K', desc: 'change cola mode (cycles between layered/radial/stress)',
     match: e => (e.key === 'k' || e.key === 'K') && !e.ctrlKey && !e.metaKey && !e.altKey,
     run: (e, cx) => cx.cycleColaMode(),
+  },
+  {
+    combo: '?', desc: 'open help panel',
+    match: e => e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey,
+    run: (e, cx) => cx.toggleHelp(),
   },
 ];
 
@@ -80,12 +85,12 @@ export const KEY_BINDINGS = [
 // handlers change.
 export const POINTER_HINTS = [
   { combo: 'Scroll',                desc: 'zoom' },
-  { combo: 'Alt+scroll over node',  desc: 'expand/collapse' },
-  { combo: 'Shift+drag',            desc: 'pin' },
-  { combo: 'Alt+click',             desc: 'focus' },
-  { combo: 'Dbl-click',             desc: 'open source' },
-  { combo: 'Right-click',           desc: 'rename/unpin' },
-  { combo: 'Click edge',            desc: 'annotate' },
+  { combo: 'Alt+scroll over node',  desc: 'zoom in to expand, zoom out to collapse this node' },
+  { combo: 'Shift+drag',            desc: 'pin a node to a fixed position (right click and choose "unpin" to let it float dynamically again)' },
+  { combo: 'Alt+click',             desc: 'focus a specific node, revealing its incoming and outgoing edges' },
+  { combo: 'Dbl-click',             desc: 'open source directory/file/symbol of this node' },
+  { combo: 'Right-click',           desc: 'rename/unpin a node' },
+  { combo: 'Click edge',            desc: 'annotate an edge, or edit the label' },
 ];
 
 // ─── Dispatcher ────────────────────────────────────────────────────────────────
@@ -131,10 +136,9 @@ export function setupKeybindings(cx) {
 }
 
 // ─── Help bar ──────────────────────────────────────────────────────────────────
-// Renders the pointer gestures + keyboard shortcuts into the given element,
-// straight from the arrays above so the docs can never drift from the bindings.
+// The full shortcut list now lives in the help panel (help.js, ? to open); the
+// HUD just carries a concise pointer to it so it doesn't crowd the graph.
 export function renderHelpBar(el) {
   if (!el) return;
-  const hint = ({ combo, desc }) => `${combo}: ${desc}`;
-  el.textContent = [...POINTER_HINTS, ...KEY_BINDINGS].map(hint).join(' · ');
+  el.textContent = 'Press ? for keys & help · P: config';
 }

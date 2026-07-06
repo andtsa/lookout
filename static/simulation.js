@@ -5,7 +5,7 @@ import {
   nodeLayer, svg, zoom, setGraphIsSparse, debugMode,
 } from './state.js';
 import { renderDebug } from './debug.js';
-import { getViewportSize, zoneToCoords, getEdgeEndpoints, containerCenter, containerRadius } from './geometry.js';
+import { getViewportSize, zoneToCoords, getEdgeEndpoints, containerCenter, containerRadius, nodeCollisionRadius } from './geometry.js';
 import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdgeExposed } from './lod.js';
 import { updateContainers, rerenderEdges } from './render.js';
 import {
@@ -13,7 +13,7 @@ import {
   CHARGE_PER_EDGE, CHARGE_ISOLATED, CHARGE_DISTANCE_MAX,
   LINK_DIST_PARENT, LINK_DIST_EDGE,
   LINK_STRENGTH_PARENT, LINK_STRENGTH_EDGE, LINK_STRENGTH_UNEXPOSED,
-  COLLISION_RADIUS, COLLISION_ITERATIONS, VELOCITY_DECAY, COLLIDE_STRENGTH,
+  COLLISION_ITERATIONS, VELOCITY_DECAY, COLLIDE_STRENGTH,
   CENTER_STRENGTH, LABEL_PULL_STRENGTH, LABEL_DECLUTTER_STRENGTH, ALPHA_DECAY,
   ZONE_STRENGTH, PARENT_PIN_STRENGTH, CENTER_PAD, CENTER_FIT_MARGIN, SPARSE_EDGE_RATIO,
 } from './constants.js';
@@ -125,11 +125,13 @@ export function buildSimulation(alpha = 1) {
     .force('cy', d3.forceY(vh / 2).strength(d => (d.edgeId || parentPinOf(d)) ? 0 : CENTER_STRENGTH))
     // Grouped collision — the core spacing force. Elements collide ONLY within
     // their sibling group (same parent = same LoD). A leaf/collapsed node is a
-    // circle of COLLISION_RADIUS; an expanded container is a circle (containerRadius
-    // around its box) that represents its whole subtree to the parent group. So a
-    // container keeps its contents clear of everything outside it, while its
-    // children collide amongst themselves in their own group. Pushing a container
-    // moves its whole cluster (its box follows its children).
+    // circle sized to its OWN text-fit box (nodeCollisionRadius — half-diagonal
+    // of node.w/h + NODE_COLLISION_MARGIN, so wider/longer-labelled nodes claim
+    // more space); an expanded container is a circle (containerRadius around its
+    // box) that represents its whole subtree to the parent group. So a container
+    // keeps its contents clear of everything outside it, while its children
+    // collide amongst themselves in their own group. Pushing a container moves
+    // its whole cluster (its box follows its children).
     .force('grouped-collide', () => {
       // Bucket visible real nodes by parent (their collision group).
       const groups = new Map();
@@ -139,7 +141,7 @@ export function buildSimulation(alpha = 1) {
         const c = isC ? containerCenter(n.containerBounds) : n;
         const item = {
           node: n, isC, x: c.x, y: c.y,
-          r: isC ? containerRadius(n.containerBounds) : COLLISION_RADIUS,
+          r: isC ? containerRadius(n.containerBounds) : nodeCollisionRadius(n),
         };
         let arr = groups.get(key);
         if (!arr) { arr = []; groups.set(key, arr); }

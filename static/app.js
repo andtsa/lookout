@@ -29,6 +29,7 @@ import { setupNodeInteractions, setupEdgeInteractions } from './interaction.js';
 import { setupKeybindings, renderHelpBar } from './keybindings.js';
 import { loadConfig, onConfigChange } from './config.js';
 import { renderConfigPanel } from './config-panel.js';
+import { initHelpPanel, toggleHelp, isHelpOpen, closeHelp } from './help.js';
 import { normaliseSource } from './code-panel.js';
 
 // ─── Visibility refresh ───────────────────────────────────────────────────────
@@ -90,7 +91,12 @@ function updateEngineIndicator() {
 const keyContext = {
   getDirty,
   save: async () => { await postSave(); setDirty(false); },
-  clearFocus: () => { if (clearFocus()) refreshVisibility(FOCUS_REHEAT_ALPHA); },
+  toggleHelp: toggleHelp,
+  // Esc closes the help panel first if it's open, otherwise clears focus.
+  clearFocus: () => {
+    if (isHelpOpen()) { closeHelp(); return; }
+    if (clearFocus()) refreshVisibility(FOCUS_REHEAT_ALPHA);
+  },
   toggleDisplayMode: () => {
     setParentDisplayMode(parentDisplayMode === 'ghost' ? 'container' : 'ghost');
     updateContainers();
@@ -246,10 +252,12 @@ async function init() {
   // Render the config panel, and relayout when a non-colour setting changes
   // (colour changes only touch CSS variables, no relayout needed).
   renderConfigPanel(document.getElementById('config-panel'));
+  initHelpPanel();
   // Relayout only for settings that affect layout; colour / description-mode
   // changes are pure visual toggles that applyField already handled.
   onConfigChange(field => {
     if (['engine', 'colaMode', 'const'].includes(field.target)) refreshVisibility(1);
+    else if (field.target === 'declutter') rerenderEdges(); // re-place labels now
   });
 
   // Initial layout via the configured engine.

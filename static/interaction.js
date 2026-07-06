@@ -13,7 +13,7 @@ import {
   visibleDescendants, isLeafNode, flashLeaf, getVisibleProxy,
   expandNode, collapseDeepestIn,
 } from './lod.js';
-import { updateContainers, rerenderEdges } from './render.js';
+import { updateContainers, rerenderEdges, resizeNodeBox } from './render.js';
 import { buildSimulation } from './simulation.js';
 import { getEdgeEndpoints } from './geometry.js';
 import { patchNode, patchEdge } from './api.js';
@@ -212,6 +212,12 @@ export function startLabelEdit(d) {
       nodeEl.classed('node-renaming', false);
       d.label = newLabel;
       nodeEl.select('text').text(newLabel);
+      // The box is sized to fit the label — a rename can change its width, so
+      // re-measure and resize it in place (renderNodes() already ran and won't
+      // run again for an existing node). A gentle reheat lets collision/edges
+      // settle into the new size.
+      resizeNodeBox(d);
+      if (_refreshFn) _refreshFn(FOCUS_REHEAT_ALPHA);
       setDirty(true);
       patchNode(d.id, { label: newLabel });
     },
@@ -313,9 +319,15 @@ svg.on('click.context', hideContextMenu);
 // ─── Event setup ──────────────────────────────────────────────────────────────
 // Call these from app.js after renderNodes() / renderEdges().
 
+// Stashed so rename (startLabelEdit, defined above and reachable from the
+// context menu — outside setupNodeInteractions' closure) can also trigger a
+// relayout after resizing a node's box.
+let _refreshFn = null;
+
 // refreshFn = app.js's refreshVisibility, passed as a callback to avoid
 // an import cycle (interaction.js → app.js → interaction.js).
 export function setupNodeInteractions(refreshFn) {
+  _refreshFn = refreshFn;
   const allNodes = nodeLayer.selectAll('.node');
 
   // Drag
@@ -399,17 +411,21 @@ export function setupEdgeInteractions() {
   const select = (event, d) => { event.stopPropagation(); selectEdge(d.id); };
   const visualFor = id => edgeLayer.selectAll('.edge-visual').filter(x => x.id === id);
 
-  // Hover the (wide) hit area → highlight the whole edge immediately; the
-  // description tooltip waits until the mouse settles (scheduleTip).
+  // Hover the (wide) hit area → highlight the whole edge immediately (including
+  // swapping to the brighter arrowhead marker — SVG markers aren't restyled by
+  // the referencing element's CSS class, so this can't be done in CSS alone);
+  // the description tooltip waits until the mouse settles (scheduleTip).
   function onEnter(event, d) {
-    visualFor(d.id).classed('edge-hover', true);
+    visualFor(d.id).classed('edge-hover', true)
+      .select('path.edge').attr('marker-end', 'url(#arrow-hover)');
     scheduleTip(d.description, event.clientX, event.clientY);
   }
   function onMove(event, d) {
     scheduleTip(d.description, event.clientX, event.clientY);
   }
   function onLeave(event, d) {
-    visualFor(d.id).classed('edge-hover', false);
+    visualFor(d.id).classed('edge-hover', false)
+      .select('path.edge').attr('marker-end', 'url(#arrow)');
     cancelTip();
   }
 

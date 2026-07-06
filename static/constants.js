@@ -1,9 +1,18 @@
 // ─── Node box dimensions ───────────────────────────────────────────────────────
+// NODE_W / NODE_W_SM are MINIMUM widths, not fixed ones: a node's actual box
+// grows to fit its label text (measured with the real font — see
+// measureNodeBox() in geometry.js), clamped to NODE_MAX_W. Heights stay fixed
+// (labels are single-line). Every consumer of node width/height (collision,
+// edge-border attachment, container bounds, the Cola engine, …) reads the
+// node's own `.w`/`.h` — set once at render time / on rename — instead of
+// these constants directly, so the real per-node size always propagates.
 
-export const NODE_W    = 140;  // level-0 node width  (px, SVG space)
+export const NODE_W    = 140;  // level-0 minimum width  (px, SVG space)
 export const NODE_H    = 44;   // level-0 node height
-export const NODE_W_SM = 110;  // level-1+ node width
+export const NODE_W_SM = 110;  // level-1+ minimum width
 export const NODE_H_SM = 32;   // level-1+ node height
+export let   NODE_TEXT_PAD = 16;  // px of padding added each side of the label text (live)
+export let   NODE_MAX_W    = 420; // px — cap so one very long label can't blow up the layout (live)
 
 // ─── Force simulation ──────────────────────────────────────────────────────────
 // Charge (repulsion) — forceManyBody strength values are negative.
@@ -54,7 +63,12 @@ export let   LINK_STRENGTH_UNEXPOSED = 0.01; // (live)
 
 // Collision — the primary spacing force now. More iterations = firmer, less
 // squishy separation (nodes settle apart instead of oscillating through).
-export let   COLLISION_RADIUS        = 105;   // exclusion radius for regular nodes (px) (live)
+// A node's exclusion radius is its OWN box's half-diagonal (0.5×hypot(w,h), so
+// wider/taller boxes automatically claim more space) plus this margin — the
+// node analogue of CONTAINER_MARGIN below. Default chosen so a default-sized
+// node (140×44) gets ~the same total radius (~105px) as before this became
+// box-aware; wider boxes (longer labels) grow the radius from there.
+export let   NODE_COLLISION_MARGIN   = 32;   // clearance added around a node's own box (px) (live)
 export let   COLLISION_ITERATIONS    = 3; // (live)
 
 // Friction: fraction of velocity *kept* each tick is (1 − velocityDecay). Higher
@@ -62,11 +76,12 @@ export let   COLLISION_ITERATIONS    = 3; // (live)
 export let   VELOCITY_DECAY          = 0.7; // (live)
 
 // Grouped collision. Elements collide only within their sibling group (same
-// parent = same LoD): a leaf/collapsed node is a circle of COLLISION_RADIUS, an
-// expanded container is a circle (containerRadius) around its box that represents
-// its whole subtree to the parent group. This is what d3.forceCollide can't do
-// (it's global). Strength = fraction of the overlap resolved per tick (soft, like
-// forceCollide); higher = firmer, riskier to jitter.
+// parent = same LoD): a leaf/collapsed node is a circle sized to its own
+// text-fit box (nodeCollisionRadius, geometry.js), an expanded container is a
+// circle (containerRadius) around its box that represents its whole subtree to
+// the parent group. This is what d3.forceCollide can't do (it's global).
+// Strength = fraction of the overlap resolved per tick (soft, like forceCollide);
+// higher = firmer, riskier to jitter.
 export let   COLLIDE_STRENGTH        = 0.4; // (live)
 // Extra clearance folded into a container's collision radius, so its neighbours
 // are kept off the perimeter, not just out of the box.
@@ -241,7 +256,7 @@ export function setTunable(key, value) {
     case 'LINK_STRENGTH_EDGE':       LINK_STRENGTH_EDGE       = value; break;
     case 'LINK_STRENGTH_UNEXPOSED':  LINK_STRENGTH_UNEXPOSED  = value; break;
     // collision / spacing
-    case 'COLLISION_RADIUS':         COLLISION_RADIUS         = value; break;
+    case 'NODE_COLLISION_MARGIN':    NODE_COLLISION_MARGIN    = value; break;
     case 'COLLISION_ITERATIONS':     COLLISION_ITERATIONS     = value; break;
     case 'COLLIDE_STRENGTH':         COLLIDE_STRENGTH         = value; break;
     case 'CONTAINER_MARGIN':         CONTAINER_MARGIN         = value; break;
@@ -272,6 +287,9 @@ export function setTunable(key, value) {
     case 'CENTER_PAD':               CENTER_PAD               = value; break;
     case 'CENTER_FIT_MARGIN':        CENTER_FIT_MARGIN        = value; break;
     case 'EXPAND_JITTER':            EXPAND_JITTER            = value; break;
+    // node box sizing
+    case 'NODE_TEXT_PAD':            NODE_TEXT_PAD            = value; break;
+    case 'NODE_MAX_W':               NODE_MAX_W               = value; break;
     // focus
     case 'SPARSE_EDGE_RATIO':        SPARSE_EDGE_RATIO        = value; break;
     case 'FOCUS_REHEAT_ALPHA':       FOCUS_REHEAT_ALPHA       = value; break;

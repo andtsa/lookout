@@ -10,8 +10,7 @@
 // Toggle with the `D` key. Drawn every tick while on.
 
 import { nodes, debugLayer, simulation } from './state.js';
-import { COLLISION_RADIUS } from './constants.js';
-import { zoneToCoords, containerCenter, containerRadius } from './geometry.js';
+import { zoneToCoords, containerCenter, containerRadius, nodeCollisionRadius } from './geometry.js';
 import { isNodeVisible } from './lod.js';
 
 const VEL_SCALE = 8; // px drawn per unit of per-tick velocity
@@ -33,7 +32,7 @@ export function renderDebug() {
   const isC = d => d.expandedDepth > 0 && d.containerBounds;
   const cx = d => isC(d) ? containerCenter(d.containerBounds).x : d.x;
   const cy = d => isC(d) ? containerCenter(d.containerBounds).y : d.y;
-  const cr = d => isC(d) ? containerRadius(d.containerBounds) : COLLISION_RADIUS;
+  const cr = d => isC(d) ? containerRadius(d.containerBounds) : nodeCollisionRadius(d);
   const coll = debugLayer.selectAll('circle.dbg-collide').data(vis, d => d.id);
   coll.enter().append('circle').attr('class', 'dbg-collide')
     .merge(coll)
