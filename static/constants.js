@@ -161,6 +161,12 @@ export let   LABEL_RADIUS_PER_CHAR   = 3.5;  // added radius per annotation char
 export let   CONTAINER_PAD           = 36;   // px on all sides except top (where the label lives) (live)
 export let   CONTAINER_LABEL_H       = 22;   // px reserved at the top for the container label text (live)
 
+// ─── Parallel edges ────────────────────────────────────────────────────────────
+// Perpendicular spacing between adjacent edges that connect the same pair of
+// nodes. Multi-edges fan into curves offset by this step so they don't overlap.
+// 0 disables the fan (all parallels collapse back onto one straight line).
+export let   EDGE_PARALLEL_GAP       = 22; // px between adjacent parallel edges (live)
+
 // ─── Zoom ──────────────────────────────────────────────────────────────────────
 
 // Fraction of wheel deltaY (pixels) converted to a zoom step each scroll tick.
@@ -270,6 +276,7 @@ export function setTunable(key, value) {
     case 'SPARSE_EDGE_RATIO':        SPARSE_EDGE_RATIO        = value; break;
     case 'FOCUS_REHEAT_ALPHA':       FOCUS_REHEAT_ALPHA       = value; break;
     case 'DIM_EDGE_OPACITY':         DIM_EDGE_OPACITY         = value; break;
+    case 'EDGE_PARALLEL_GAP':        EDGE_PARALLEL_GAP        = value; break;
     default: return false; // not a live-tunable key
   }
   return true;

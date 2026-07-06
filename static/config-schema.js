@@ -83,6 +83,7 @@ export const CONFIG_SCHEMA = [
       num('LABEL_RADIUS_PER_CHAR','Label radius/char',0, 20,  0.5, 'Added label radius per annotation character.'),
       num('CENTER_PAD',          'Fit padding',       0, 600, 20,  'Padding around the graph when fitting to screen.'),
       num('CENTER_FIT_MARGIN',   'Fit margin',        0, 1,   0.05, 'Scale factor after fitting (keeps a margin).'),
+      num('EDGE_PARALLEL_GAP',   'Parallel edge gap', 0, 100, 2,   'Spacing between edges connecting the same node pair (0 = overlap).'),
     ],
   },
   {

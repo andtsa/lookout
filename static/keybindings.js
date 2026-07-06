@@ -45,11 +45,17 @@ export const KEY_BINDINGS = [
     run: (e, cx) => cx.zoomBy(e.key === '-' ? 1 / 1.3 : 1.3),
   },
   {
-    combo: 'E/C', desc: 'expand/collapse all',
+    combo: 'Shift+E/C', desc: 'expand/collapse all',
     // Allow AltGr (Ctrl+Alt on Windows) but block plain Ctrl/Cmd combos.
     match: e => (e.key === 'e' || e.key === 'E' || e.key === 'c' || e.key === 'C')
-      && !e.metaKey && !(e.ctrlKey && !e.altKey),
+      && e.shiftKey && !e.metaKey && !(e.ctrlKey && !e.altKey),
     run: (e, cx) => { if (e.key === 'c' || e.key === 'C') cx.collapseAll(); else cx.expandAll(); },
+  },
+  {
+    combo: 'E/C', desc: 'expand/collapse hovered',
+    match: e => (e.key === 'e' || e.key === 'E' || e.key === 'c' || e.key === 'C')
+      && !e.shiftKey && !e.metaKey && !(e.ctrlKey && !e.altKey),
+    run: (e, cx) => { if (e.key === 'c' || e.key === 'C') cx.collapseHovered(); else cx.expandHovered(); },
   },
   {
     combo: 'P', desc: 'config panel',

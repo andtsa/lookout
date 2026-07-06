@@ -8,13 +8,16 @@ import {
   nodes, edges, labelNodes, nodeLayer, svg, zoom,
   setNodes, setEdges, setSourceToNode, getDirty, setDirty,
   setParentDisplayMode, parentDisplayMode, clearFocus,
-  setDebugMode, debugMode,
+  setDebugMode, debugMode, hoveredNodeId,
   layoutEngine, setLayoutEngine, colaMode, setColaMode, COLA_MODES,
 } from './state.js';
 import { renderDebug, clearDebug } from './debug.js';
 import { NESTED_SCALE, FOCUS_REHEAT_ALPHA } from './constants.js';
 import { initialPosition } from './geometry.js';
-import { isNodeVisible, globalExpand, globalCollapse } from './lod.js';
+import {
+  isNodeVisible, globalExpand, globalCollapse,
+  isLeafNode, expandNode, collapseDeepestIn, flashLeaf,
+} from './lod.js';
 import { initLabelNodes, buildSimulation, centerGraph, scheduleCenterGraph } from './simulation.js';
 import { runColaLayout } from './layout-cola.js';
 import {
@@ -102,6 +105,22 @@ const keyContext = {
   zoomBy: factor => svg.transition().duration(250).call(zoom.scaleBy, factor),
   expandAll:   () => { if (globalExpand())   refreshVisibility(); },
   collapseAll: () => { if (globalCollapse()) refreshVisibility(); },
+  // Plain E/C: expand/collapse just the node/container currently under the
+  // cursor (hoveredNodeId), mirroring the Alt+scroll per-node gesture.
+  expandHovered: () => {
+    const d = nodes[hoveredNodeId];
+    if (!d) return;
+    if (isLeafNode(d)) { flashLeaf(d.id); return; }
+    expandNode(d);
+    refreshVisibility();
+  },
+  collapseHovered: () => {
+    const d = nodes[hoveredNodeId];
+    if (!d) return;
+    if (isLeafNode(d)) { flashLeaf(d.id); return; }
+    collapseDeepestIn(d);
+    refreshVisibility();
+  },
   // Switch layout engine (force ↔ cola) and relayout.
   toggleEngine: () => {
     setLayoutEngine(layoutEngine === 'cola' ? 'force' : 'cola');
