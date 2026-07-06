@@ -102,16 +102,26 @@ body {
   stroke: var(--accent);
   stroke-width: 1px;
   stroke-dasharray: 6 4;
-  z-index: 5;
   opacity: 0.65;
+  /* Click-through: the box is purely visual now. nodeLayer paints AFTER
+     edgeLayer (containers always visually sit on top of the edges routed
+     beneath them, by design), so without this the box would swallow hover/
+     click for any edge under it — z-index can't fix that (it has no effect on
+     a plain, unpositioned SVG shape), but pointer-events:none does: the browser
+     skips this element during hit-testing entirely and lands on whatever is
+     underneath, regardless of paint order. Drag/scroll/rename/hover move to
+     .container-hit (the header strip) below. */
+  pointer-events: none;
 }
-
+/* Invisible header-strip hit target — the container's actual drag/hover/
+   right-click handle. Covers just the label row, not the whole box, so the
+   rest of the container stays click-through for edges beneath it. */
 .container-hit {
   display: none;
   fill: transparent;
   stroke: none;
-  /* cursor: pointer; */
-  /* pointer-events: none; */
+  cursor: pointer;
+  pointer-events: none; /* only active (below) while the node IS a container */
 }
 .node.node-container .node-rect {
   display: none;

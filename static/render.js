@@ -2,7 +2,7 @@
 // Creates and updates SVG elements.  Does NOT set up event handlers (those live
 // in interaction.js / app.js) and does NOT call buildSimulation.
 
-import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, CONTAINER_PAD, CONTAINER_LABEL_H, DIM_EDGE_OPACITY } from './constants.js';
+import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, CONTAINER_PAD, CONTAINER_LABEL_H, DIM_EDGE_OPACITY, EDGE_PARALLEL_GAP } from './constants.js';
 import {
   nodes, edges, labelNodes, nodeLayer, edgeLayer, zoom, svg,
   parentDisplayMode, focusedNodeIds,
@@ -91,26 +91,89 @@ export function renderNodes() {
 export function renderEdges() {
   const edgeList = Object.values(edges);
 
-  // Invisible wide hit areas (easier to click)
+  // Invisible wide hit areas (easier to click). Paths (not lines) so they follow
+  // the curve of spread-apart parallel edges.
   const hitSel = edgeLayer.selectAll('.edge-hitarea-group').data(edgeList, d => d.id);
   hitSel.enter().append('g')
     .attr('class', 'edge-hitarea-group')
-    .append('line').attr('class', 'edge-hitarea');
+    .append('path').attr('class', 'edge-hitarea');
   hitSel.exit().remove();
 
-  // Visible edge lines + annotation text
+  // Visible edge paths + annotation text
   const edgeSel = edgeLayer.selectAll('.edge-visual').data(edgeList, d => d.id);
   const edgeEnter = edgeSel.enter().append('g').attr('class', 'edge-visual');
-  edgeEnter.append('line').attr('class', 'edge').attr('marker-end', 'url(#arrow)');
+  edgeEnter.append('path').attr('class', 'edge').attr('marker-end', 'url(#arrow)');
   edgeEnter.append('text').attr('class', 'edge-annotation');
   edgeSel.exit().remove();
 
   rerenderEdges();
 }
 
+// ─── Parallel-edge separation ─────────────────────────────────────────────────
+// When several edges connect the same visible pair of nodes (in either
+// direction), a straight line would draw them all on top of one another. We fan
+// them apart into curves, and stack their labels.
+//
+// Per edge we return:
+//   spread   signed perpendicular offset for the CURVE, computed in a canonical
+//            frame (lower-id → higher-id endpoint) so both directions land on
+//            consistent sides. A lone edge → 0 → plain straight line.
+//   dy       VERTICAL label stagger (slot × gap). Labels must separate vertically
+//            because the text is horizontal — the perpendicular curve offset only
+//            does that for horizontal edges (for a top-to-bottom edge it shoves
+//            labels sideways and long text overlaps). Stacking by dy works for any
+//            orientation. For a horizontal edge dy equals the curve's own vertical
+//            offset, so nothing changes there.
+//   parallel true when the edge is one of ≥2 between the pair (drives label mode).
+
+function computeParallelSpread() {
+  const groups = new Map(); // canonical "a\0b" → [{ id, sign }]
+  for (const e of Object.values(edges)) {
+    const fp = getVisibleProxy(e.from), tp = getVisibleProxy(e.to);
+    if (!fp || !tp || fp.id === tp.id) continue;
+    const canonical = fp.id < tp.id;
+    const key = canonical ? `${fp.id}\0${tp.id}` : `${tp.id}\0${fp.id}`;
+    let arr = groups.get(key);
+    if (!arr) groups.set(key, arr = []);
+    arr.push({ id: e.id, sign: canonical ? 1 : -1 });
+  }
+  const info = new Map();
+  for (const arr of groups.values()) {
+    if (arr.length < 2) { info.set(arr[0].id, { spread: 0, dy: 0, parallel: false }); continue; }
+    arr.sort((a, b) => (a.id < b.id ? -1 : 1)); // stable order within the group
+    const n = arr.length;
+    arr.forEach((it, i) => {
+      const slot = i - (n - 1) / 2;
+      info.set(it.id, {
+        spread: slot * EDGE_PARALLEL_GAP * it.sign, // curve offset (direction-aware)
+        dy: slot * EDGE_PARALLEL_GAP,               // label vertical stagger (always down the stack)
+        parallel: true,
+      });
+    });
+  }
+  return info;
+}
+
+// Path + curve-peak point for an edge given its endpoints and signed spread.
+// spread 0 → straight line; else a quadratic whose apex sits `spread` px off the
+// straight midpoint (control point at 2×spread so the apex lands exactly there).
+function curveGeom(pts, spread) {
+  const { x1, y1, x2, y2 } = pts;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  if (!spread) return { d: `M${x1},${y1}L${x2},${y2}`, px: mx, py: my };
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len; // unit normal
+  return {
+    d:  `M${x1},${y1}Q${mx + nx * spread * 2},${my + ny * spread * 2} ${x2},${y2}`,
+    px: mx + nx * spread, py: my + ny * spread,
+  };
+}
+
 // ─── Edge geometry update (called every simulation tick) ──────────────────────
 
 export function rerenderEdges() {
+  const spreadMap = computeParallelSpread();
+
   edgeLayer.selectAll('.edge-visual').each(function(d) {
     const fromProxy = getVisibleProxy(d.from);
     const toProxy   = getVisibleProxy(d.to);
@@ -126,14 +189,17 @@ export function rerenderEdges() {
       .attr('pointer-events', exposed ? 'all' : 'none');
     if (!pts) return;
 
-    el.select('line.edge')
-      .attr('x1', pts.x1).attr('y1', pts.y1)
-      .attr('x2', pts.x2).attr('y2', pts.y2);
+    const info = spreadMap.get(d.id) || { spread: 0, dy: 0, parallel: false };
+    el.select('path.edge').attr('d', curveGeom(pts, info.spread).d);
 
-    // Annotation: only show for exposed edges; prefer phantom label node position
+    // Annotation: only show for exposed edges. Parallel edges stack their labels
+    // vertically (dy) at the pair's midpoint so long horizontal text separates
+    // regardless of edge orientation; a lone edge prefers its phantom-label
+    // position, falling back to the midpoint.
     const ln = labelNodes[d.id];
-    const tx = (ln && ln._placed) ? ln.x : (pts.x1 + pts.x2) / 2;
-    const ty = (ln && ln._placed) ? ln.y : (pts.y1 + pts.y2) / 2 - 6;
+    const mx = (pts.x1 + pts.x2) / 2, my = (pts.y1 + pts.y2) / 2;
+    const tx = info.parallel ? mx : (ln && ln._placed) ? ln.x : mx;
+    const ty = info.parallel ? my + info.dy : (ln && ln._placed) ? ln.y : my - 6;
     el.select('text.edge-annotation')
       .attr('x', tx).attr('y', ty).attr('text-anchor', 'middle')
       .text(exposed ? (d.annotation || '') : '');
@@ -148,9 +214,7 @@ export function rerenderEdges() {
     const el      = d3.select(this);
     el.attr('pointer-events', exposed ? 'all' : 'none');
     if (pts) {
-      el.select('line.edge-hitarea')
-        .attr('x1', pts.x1).attr('y1', pts.y1)
-        .attr('x2', pts.x2).attr('y2', pts.y2);
+      el.select('path.edge-hitarea').attr('d', curveGeom(pts, (spreadMap.get(d.id) || {}).spread || 0).d);
     }
   });
 }
