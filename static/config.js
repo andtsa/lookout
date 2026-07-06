@@ -11,7 +11,7 @@
 
 import { allFields, fieldByKey, validateField } from './config-schema.js';
 import { setTunable } from './constants.js';
-import { setLayoutEngine, setColaMode } from './state.js';
+import { setLayoutEngine, setColaMode, setNodeDescriptionMode, setHoverTipDelay } from './state.js';
 
 let values = {};              // key → current value
 let dotfilePath = '';         // writable file path (for display)
@@ -28,6 +28,12 @@ function applyField(f, v) {
     case 'colaMode': setColaMode(v); break;
     case 'const':    setTunable(f.key, v); break;
     case 'color':    document.documentElement.style.setProperty(f.cssVar, v); break;
+    case 'nodeDescMode':
+      setNodeDescriptionMode(v);
+      // Toggle a body class the CSS uses to show/hide the inline caption.
+      document.body.classList.toggle('desc-inline', v === 'inline');
+      break;
+    case 'hoverDelay': setHoverTipDelay(v); break;
   }
 }
 

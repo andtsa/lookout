@@ -67,7 +67,7 @@ export let   VELOCITY_DECAY          = 0.7; // (live)
 // its whole subtree to the parent group. This is what d3.forceCollide can't do
 // (it's global). Strength = fraction of the overlap resolved per tick (soft, like
 // forceCollide); higher = firmer, riskier to jitter.
-export let   COLLIDE_STRENGTH        = 0.7; // (live)
+export let   COLLIDE_STRENGTH        = 0.4; // (live)
 // Extra clearance folded into a container's collision radius, so its neighbours
 // are kept off the perimeter, not just out of the box.
 export let   CONTAINER_MARGIN        = 24; // (live)
@@ -201,6 +201,12 @@ export let   SPARSE_EDGE_RATIO       = 0.5; // (live)
 // accidental plain clicks no longer trigger it). Lower = calmer settle.
 export let   FOCUS_REHEAT_ALPHA      = 0.3; // (live)
 
+// Opacity of a dim/unfocused edge (focus active, this edge's endpoints aren't
+// focused, and the graph isn't sparse). 0 = invisible, 1 = same as an exposed
+// edge (defeats the point of focus mode). Set on the edge-visual group in
+// rerenderEdges (render.js).
+export let   DIM_EDGE_OPACITY        = 0.1; // (live)
+
 // ─── Nested (included) maps ─────────────────────────────────────────────────
 
 // Nested nodes keep their inner map's layout, recentred on the mount node and
@@ -263,6 +269,7 @@ export function setTunable(key, value) {
     // focus
     case 'SPARSE_EDGE_RATIO':        SPARSE_EDGE_RATIO        = value; break;
     case 'FOCUS_REHEAT_ALPHA':       FOCUS_REHEAT_ALPHA       = value; break;
+    case 'DIM_EDGE_OPACITY':         DIM_EDGE_OPACITY         = value; break;
     default: return false; // not a live-tunable key
   }
   return true;

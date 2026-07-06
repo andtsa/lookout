@@ -69,6 +69,7 @@ pub async fn create_edge(
         from: body.from,
         to: body.to,
         annotation: body.annotation,
+        description: None,
         kind: EdgeKind::Semantic,
         id_derived: false, // an explicit id was supplied
     };

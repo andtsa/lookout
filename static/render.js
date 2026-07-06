@@ -2,13 +2,33 @@
 // Creates and updates SVG elements.  Does NOT set up event handlers (those live
 // in interaction.js / app.js) and does NOT call buildSimulation.
 
-import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, CONTAINER_PAD, CONTAINER_LABEL_H } from './constants.js';
+import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, CONTAINER_PAD, CONTAINER_LABEL_H, DIM_EDGE_OPACITY } from './constants.js';
 import {
   nodes, edges, labelNodes, nodeLayer, edgeLayer, zoom, svg,
   parentDisplayMode, focusedNodeIds,
 } from './state.js';
 import { getEdgeEndpoints } from './geometry.js';
 import { isNodeVisible, visibleDescendants, getVisibleProxy, isEdgeExposed } from './lod.js';
+
+// Symbol-kind → corner-badge glyph. Colour comes from the `symkind-*` CSS class;
+// the glyph disambiguates within a colour (e.g. class 'C' vs struct 'S'). Unknown
+// (custom) kinds fall back to their first letter.
+const SYM_GLYPH = {
+  function: 'ƒ', method: 'ƒ',
+  class: 'C', struct: 'S',
+  interface: 'I', trait: 'T',
+  enum: 'E',
+  constant: 'K', variable: 'V', field: 'F',
+  module: 'M', type: 'Y', macro: '!',
+};
+const glyphFor = k => (k ? (SYM_GLYPH[k] || k[0].toUpperCase()) : '');
+const glyphX   = d => -(d.level >= 1 ? NODE_W_SM : NODE_W) / 2 + 10;
+const glyphY   = d => -(d.level >= 1 ? NODE_H_SM : NODE_H) / 2 + 10;
+
+// Inline description caption (shown under the node in 'inline' mode). Truncated
+// so it stays a single readable line; the full text is available on hover.
+const descCaption = s => (s ? (s.length > 42 ? s.slice(0, 41) + '…' : s) : '');
+const descY = d => (d.level >= 1 ? NODE_H_SM : NODE_H) / 2 + 11;
 
 // ─── Node rendering ───────────────────────────────────────────────────────────
 // Renders ALL nodes at startup (invisible ones at opacity 0).
@@ -22,7 +42,7 @@ export function renderNodes() {
 
   const enter = sel.enter().append('g')
     .attr('id',        d => `node-${d.id}`)
-    .attr('class',     d => `node level-${d.level}${d.pin ? ' pinned' : ''}${d.source_missing ? ' broken-source' : ''}${d.nested ? ' node-nested' : ''}${d.kind ? ' kind-' + d.kind : ''}`)
+    .attr('class',     d => `node level-${d.level}${d.pin ? ' pinned' : ''}${d.source_missing ? ' broken-source' : ''}${d.nested ? ' node-nested' : ''}${d.kind ? ' kind-' + d.kind : ''}${d.symbol_kind ? ' symkind-' + d.symbol_kind : ''}`)
     .attr('data-id',   d => d.id)
     .attr('transform', d => `translate(${d.x},${d.y})`)
     .attr('opacity',        d => isNodeVisible(d) ? 1 : 0)
@@ -37,14 +57,31 @@ export function renderNodes() {
     .attr('rx', 6);
 
   enter.append('rect').attr('class', 'container-rect');
+  // Invisible wide border ring — the container's drag / scroll / hover handle.
+  // The visible box fill is click-through (CSS) so edges inside it stay hoverable.
+  enter.append('rect').attr('class', 'container-hit');
 
   enter.append('text')
     .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
     .text(d => d.label);
 
+  // Symbol-kind glyph badge, top-left corner. Hidden by CSS on non-symbol nodes.
+  enter.append('circle').attr('class', 'node-glyph-bg')
+    .attr('cx', glyphX).attr('cy', glyphY).attr('r', 7);
+  enter.append('text').attr('class', 'node-glyph')
+    .attr('x', glyphX).attr('y', glyphY)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+    .text(d => glyphFor(d.symbol_kind));
+
+  // Description caption under the node — visible only in 'inline' mode (CSS).
+  enter.append('text').attr('class', 'node-desc')
+    .attr('x', 0).attr('y', descY)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'hanging')
+    .text(d => descCaption(d.description));
+
   // Merge to keep class in sync (pin state changes after drag)
   enter.merge(sel)
-    .attr('class', d => `node level-${d.level}${d.pin ? ' pinned' : ''}${d.source_missing ? ' broken-source' : ''}${d.nested ? ' node-nested' : ''}${d.kind ? ' kind-' + d.kind : ''}`);
+    .attr('class', d => `node level-${d.level}${d.pin ? ' pinned' : ''}${d.source_missing ? ' broken-source' : ''}${d.nested ? ' node-nested' : ''}${d.kind ? ' kind-' + d.kind : ''}${d.symbol_kind ? ' symkind-' + d.symbol_kind : ''}`);
 
   sel.exit().remove();
 }
@@ -82,8 +119,8 @@ export function rerenderEdges() {
     const pts      = vis ? getEdgeEndpoints(d, getVisibleProxy) : null;
     const el       = d3.select(this);
 
-    // Three opacity states: hidden (0), dim/unfocused (0.1), full (1).
-    const opacity = !vis ? '0' : !exposed ? '0.1' : '1';
+    // Three opacity states: hidden (0), dim/unfocused (DIM_EDGE_OPACITY), full (1).
+    const opacity = !vis ? '0' : !exposed ? DIM_EDGE_OPACITY : '1';
     el.style('opacity', opacity)
       .classed('edge-dim', vis && !exposed)
       .attr('pointer-events', exposed ? 'all' : 'none');
@@ -135,6 +172,7 @@ export function updateContainers() {
       el.classed('node-ghost', false).classed('node-container', false);
       el.select('.node-rect').attr('display', null);
       el.select('.container-rect').attr('display', 'none');
+      el.select('.container-hit').attr('display', 'none');
       el.select('text').attr('x', 0).attr('y', 0)
         .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle');
       d.containerBounds = null;
@@ -146,6 +184,7 @@ export function updateContainers() {
     if (desc.length === 0 || parentDisplayMode === 'ghost') {
       el.classed('node-ghost', true).classed('node-container', false);
       el.select('.container-rect').attr('display', 'none');
+      el.select('.container-hit').attr('display', 'none');
       el.select('.node-rect').attr('display', null);
       el.select('text').attr('x', 0).attr('y', 0)
         .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle');
@@ -188,6 +227,17 @@ export function updateContainers() {
       .attr('x', minX).attr('y', minY)
       .attr('width',  maxX - minX)
       .attr('height', maxY - minY)
+      .attr('rx', 10);
+
+    // Header strip (label row only) is the actual pointer target — drag / hover /
+    // alt+scroll / right-click all work by grabbing the container's header. The
+    // rest of the box is click-through (see .container-rect pointer-events:none
+    // in CSS) so edges routed underneath a container stay hoverable/clickable.
+    el.select('.container-hit')
+      .attr('display', 'inline')
+      .attr('x', minX).attr('y', minY)
+      .attr('width',  maxX - minX)
+      .attr('height', CONTAINER_LABEL_H)
       .attr('rx', 10);
 
     el.select('text')

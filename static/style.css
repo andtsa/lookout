@@ -102,15 +102,26 @@ body {
   stroke: var(--accent);
   stroke-width: 1px;
   stroke-dasharray: 6 4;
+  z-index: 5;
   opacity: 0.65;
-  /* pointer-events: default — container captures drag/scroll; child nodes are on top
-     in z-order (sorted by level in renderNodes) so they still receive events first */
+}
+
+.container-hit {
+  display: none;
+  fill: transparent;
+  stroke: none;
+  /* cursor: pointer; */
+  /* pointer-events: none; */
 }
 .node.node-container .node-rect {
   display: none;
 }
 .node.node-container .container-rect {
   display: block;
+}
+.node.node-container .container-hit {
+  display: block;
+  pointer-events: all;
 }
 .node.node-container text {
   font-size: 10px;
@@ -195,6 +206,7 @@ body {
 
 /* Edges */
 .edge-visual {
+  z-index: 30;
   transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -717,3 +729,84 @@ select.cfg-input { cursor: pointer; }
 .cfg-hint { color: #fb4934; font-size: 11px; margin-top: 2px; }
 .cfg-hint:empty { display: none; }
 .cfg-foot { margin-top: 12px; color: var(--text-muted); font-size: 10px; word-break: break-all; }
+
+/* ── Symbol nodes ────────────────────────────────────────────────────────────
+   A Symbol node's kind (function / class / trait / …) shows as a small corner
+   glyph badge — NOT a border tint, which the focus ring and broken-source cue
+   already own. The badge circle is coloured per kind; the glyph char sits on top.
+   Layout is unaffected (that's NodeKind). */
+.node-glyph-bg {
+  fill: var(--text-faint);          /* default (custom kinds); overridden per kind */
+  stroke: var(--bg-base);
+  stroke-width: 1.5px;
+}
+.node-glyph {
+  font: 700 9px ui-monospace, monospace;
+  fill: var(--bg-base);             /* dark glyph on the coloured badge */
+  pointer-events: none;
+  text-transform: none;
+}
+/* Only symbol nodes carry a badge. */
+.node:not([class*="symkind-"]) .node-glyph-bg,
+.node:not([class*="symkind-"]) .node-glyph { display: none; }
+
+.node.symkind-function  .node-glyph-bg,
+.node.symkind-method    .node-glyph-bg { fill: #b8bb26; }  /* green  */
+.node.symkind-class     .node-glyph-bg,
+.node.symkind-struct    .node-glyph-bg { fill: #fabd2f; }  /* yellow */
+.node.symkind-interface .node-glyph-bg,
+.node.symkind-trait     .node-glyph-bg { fill: #d3869b; }  /* purple */
+.node.symkind-enum      .node-glyph-bg { fill: #83a598; }  /* blue   */
+.node.symkind-constant  .node-glyph-bg,
+.node.symkind-variable  .node-glyph-bg,
+.node.symkind-field     .node-glyph-bg { fill: #8ec07c; }  /* aqua   */
+.node.symkind-module    .node-glyph-bg,
+.node.symkind-type      .node-glyph-bg,
+.node.symkind-macro     .node-glyph-bg { fill: #fe8019; }  /* orange */
+
+/* Highlighted line in the code panel — where a symbol node points. */
+.code-line-highlight {
+  position: absolute;
+  left: 0; right: 0;
+  background: var(--accent-muted);
+  border-left: 3px solid var(--accent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Descriptions ────────────────────────────────────────────────────────────
+   Node caption under the box — only in 'inline' mode (body.desc-inline). In
+   'hover' mode the description shows in #hover-tip instead. */
+.node-desc {
+  font: 8px ui-monospace, monospace;
+  fill: var(--text-faint);
+  pointer-events: none;
+  display: none;
+}
+body.desc-inline .node-desc { display: inline; }
+
+/* Hover tooltip — node/edge descriptions. */
+#hover-tip {
+  position: fixed;
+  z-index: 100;
+  max-width: 320px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-dim);
+  border-radius: 4px;
+  padding: 6px 9px;
+  font: 12px/1.45 ui-monospace, monospace;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  white-space: pre-wrap;
+}
+#hover-tip[hidden] { display: none; }
+
+/* Hovered edge — brighten the whole line so it's obvious which edge is hovered. */
+.edge-visual.edge-hover { opacity: 1; }
+.edge-visual.edge-hover .edge {
+  stroke: var(--accent-light);
+  stroke-width: 3px;
+  stroke-dasharray: none;
+  opacity: 1;
+}

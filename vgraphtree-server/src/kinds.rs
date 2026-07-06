@@ -34,6 +34,77 @@ impl NodeKind {
     }
 }
 
+/// Refines a `NodeKind::Symbol` — what *kind* of symbol it is. Drives an icon /
+/// colour on the frontend only; layout is unaffected. Uses a custom string
+/// (de)serializer (like EdgeKind) so the YAML stays clean (`symbol_kind: function`)
+/// and any unrecognised value round-trips as `Custom`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SymbolKind {
+    Function,
+    Method,
+    Class,
+    Struct,
+    Interface,
+    Trait,
+    Enum,
+    Constant,
+    Variable,
+    Field,
+    Module,
+    Type,
+    Macro,
+    Custom(String),
+}
+
+impl SymbolKind {
+    fn as_str(&self) -> &str {
+        match self {
+            SymbolKind::Function => "function",
+            SymbolKind::Method => "method",
+            SymbolKind::Class => "class",
+            SymbolKind::Struct => "struct",
+            SymbolKind::Interface => "interface",
+            SymbolKind::Trait => "trait",
+            SymbolKind::Enum => "enum",
+            SymbolKind::Constant => "constant",
+            SymbolKind::Variable => "variable",
+            SymbolKind::Field => "field",
+            SymbolKind::Module => "module",
+            SymbolKind::Type => "type",
+            SymbolKind::Macro => "macro",
+            SymbolKind::Custom(s) => s.as_str(),
+        }
+    }
+}
+
+impl Serialize for SymbolKind {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for SymbolKind {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.as_str() {
+            "function" => SymbolKind::Function,
+            "method" => SymbolKind::Method,
+            "class" => SymbolKind::Class,
+            "struct" => SymbolKind::Struct,
+            "interface" => SymbolKind::Interface,
+            "trait" => SymbolKind::Trait,
+            "enum" => SymbolKind::Enum,
+            "constant" => SymbolKind::Constant,
+            "variable" => SymbolKind::Variable,
+            "field" => SymbolKind::Field,
+            "module" => SymbolKind::Module,
+            "type" => SymbolKind::Type,
+            "macro" => SymbolKind::Macro,
+            _ => SymbolKind::Custom(s),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum EdgeKind {
     Import,

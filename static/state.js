@@ -24,6 +24,16 @@ export let colaMode        = 'layered';
 export function setColaMode(v)     { colaMode = v; }
 export const COLA_MODES    = ['layered', 'radial', 'stress'];
 
+// How node descriptions are shown: 'inline' (caption under the node) or 'hover'
+// (popup on hover only). Set by the config panel; toggles a body class + tooltip.
+export let nodeDescriptionMode = 'hover';
+export function setNodeDescriptionMode(v) { nodeDescriptionMode = v; }
+
+// Delay (ms) the mouse must be still over a node/edge before its description
+// tooltip appears. Set by the config panel.
+export let hoverTipDelay = 500;
+export function setHoverTipDelay(v) { hoverTipDelay = v; }
+
 // Focused node IDs — mutated in-place so all importers share the same Set.
 // Edges are always dim unless at least one endpoint is focused, EXCEPT when
 // graphIsSparse is true (see lod.js / simulation.js).
