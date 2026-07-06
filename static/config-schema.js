@@ -60,7 +60,7 @@ export const CONFIG_SCHEMA = [
       num('LINK_STRENGTH_PARENT',      'Parent stiffness',  0,      1,    0.001, 'Parent → child spring stiffness.'),
       num('LINK_STRENGTH_EDGE',        'Edge stiffness',    0,      1,    0.001, 'Exposed semantic edge spring stiffness.'),
       num('LINK_STRENGTH_UNEXPOSED',   'Faded stiffness',   0,      1,    0.001, 'Unexposed (faded) edge spring stiffness.'),
-      num('COLLISION_RADIUS',          'Collision radius',  0,      1000, 5,   'Node exclusion radius.'),
+      num('NODE_COLLISION_MARGIN',     'Node collision margin', 0,  1000, 5,   'Clearance added around a node’s own (text-fit) box for collision.'),
       num('COLLISION_ITERATIONS',      'Collision iters',   1,      10,   1,   'Collision solver passes per tick.'),
       num('COLLIDE_STRENGTH',          'Collide strength',  0,      1,    0.05, 'Grouped-collision overlap resolved per tick.'),
       num('VELOCITY_DECAY',            'Velocity decay',    0,      1,    0.05, 'Friction (0 = none, 1 = frozen).'),
@@ -84,6 +84,9 @@ export const CONFIG_SCHEMA = [
       num('CENTER_PAD',          'Fit padding',       0, 600, 20,  'Padding around the graph when fitting to screen.'),
       num('CENTER_FIT_MARGIN',   'Fit margin',        0, 1,   0.05, 'Scale factor after fitting (keeps a margin).'),
       num('EDGE_PARALLEL_GAP',   'Parallel edge gap', 0, 100, 2,   'Spacing between edges connecting the same node pair (0 = overlap).'),
+      { key: 'declutter_labels', label: 'Declutter labels', type: 'bool', default: true, target: 'declutter', help: 'Nudge edge labels off nodes they would overlap (off = keep labels pinned to their edge).' },
+      num('NODE_TEXT_PAD',       'Node text padding', 0, 100, 2,   'Padding added each side of a node’s label when sizing its box.'),
+      num('NODE_MAX_W',          'Node max width',    50, 2000, 10, 'Cap on a node’s box width, however long its label is.'),
     ],
   },
   {
@@ -120,9 +123,10 @@ export const CONFIG_SCHEMA = [
 export function allFields()      { return CONFIG_SCHEMA.flatMap(s => s.fields); }
 export function fieldByKey(key)  { return allFields().find(f => f.key === key); }
 
-// Coerce a raw input string to the field's value type.
+// Coerce a raw input to the field's value type.
 export function coerce(f, raw) {
   if (f.type === 'number') return raw === '' ? NaN : Number(raw);
+  if (f.type === 'bool')   return raw === true || raw === 'true';
   return raw;
 }
 
@@ -141,6 +145,8 @@ export function validateField(f, value) {
     }
     case 'color':
       return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(String(value)) ? null : 'expected a hex colour, e.g. #d79921';
+    case 'bool':
+      return typeof value === 'boolean' ? null : 'expected true or false';
     default:
       return null;
   }

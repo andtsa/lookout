@@ -11,7 +11,7 @@
 
 import { allFields, fieldByKey, validateField } from './config-schema.js';
 import { setTunable } from './constants.js';
-import { setLayoutEngine, setColaMode, setNodeDescriptionMode, setHoverTipDelay } from './state.js';
+import { setLayoutEngine, setColaMode, setNodeDescriptionMode, setHoverTipDelay, setLabelDeclutter } from './state.js';
 
 let values = {};              // key → current value
 let dotfilePath = '';         // writable file path (for display)
@@ -34,6 +34,7 @@ function applyField(f, v) {
       document.body.classList.toggle('desc-inline', v === 'inline');
       break;
     case 'hoverDelay': setHoverTipDelay(v); break;
+    case 'declutter':  setLabelDeclutter(v); break;
   }
 }
 

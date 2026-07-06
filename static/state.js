@@ -34,6 +34,11 @@ export function setNodeDescriptionMode(v) { nodeDescriptionMode = v; }
 export let hoverTipDelay = 500;
 export function setHoverTipDelay(v) { hoverTipDelay = v; }
 
+// Whether edge labels are nudged off nodes they'd overlap. Off = labels stay
+// pinned to their edge even when a node sits under them. Set by the config panel.
+export let labelDeclutter = true;
+export function setLabelDeclutter(v) { labelDeclutter = v; }
+
 // Focused node IDs — mutated in-place so all importers share the same Set.
 // Edges are always dim unless at least one endpoint is focused, EXCEPT when
 // graphIsSparse is true (see lod.js / simulation.js).
@@ -94,6 +99,19 @@ defs.append('marker')
   .attr('opacity', 0.6);
   // Fill is themed via CSS (`#arrow path { fill: var(--accent) }`) so the
   // arrowhead colour follows the active palette.
+
+// Highlighted arrowhead for a hovered edge. SVG markers aren't restyled by the
+// CSS class of the element referencing them, so a hovered edge swaps its
+// `marker-end` to this second marker instead (see interaction.js edge hover) —
+// same shape, themed brighter/opaque via CSS (`#arrow-hover path`).
+defs.append('marker')
+  .attr('id',          'arrow-hover')
+  .attr('viewBox',     '0 -4 8 8')
+  .attr('refX',        8).attr('refY', 0)
+  .attr('markerWidth', 6).attr('markerHeight', 6)
+  .attr('orient',      'auto')
+  .append('path')
+  .attr('d', 'M0,-4L8,0L0,4');
 
 // Full-viewport transparent "catcher". d3-zoom binds its wheel/drag listeners to
 // <svg>, but an SVG only receives pointer events where something is *painted* —

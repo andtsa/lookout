@@ -39,7 +39,7 @@ nodes:
   backend:
     label: Rust backend
     source: vgraphtree-server/
-    description: Axum server — parses the intent map, serves the composed graph and file contents, and persists edits.
+    description: An axum web server. it parses the intent map, serves the composed graph and file contents, and persists edits.
     zone: top-left
     children:
       route_handlers:

@@ -1,8 +1,50 @@
 // ─── Coordinate geometry ──────────────────────────────────────────────────────
 // Pure coordinate helpers.  No render side-effects; imports only constants/state.
 
-import { NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, CONTAINER_MARGIN } from './constants.js';
+import {
+  NODE_W, NODE_H, NODE_W_SM, NODE_H_SM, NODE_TEXT_PAD, NODE_MAX_W,
+  NODE_COLLISION_MARGIN, CONTAINER_MARGIN,
+} from './constants.js';
 import { svg } from './state.js';
+
+// ─── Node box sizing (text-fit width) ──────────────────────────────────────────
+// A node's box grows to fit its label instead of a fixed width. NODE_W/NODE_W_SM
+// are floors; NODE_MAX_W is a ceiling so one very long label can't blow up the
+// layout. Height stays fixed (labels are single-line).
+//
+// Every consumer of node size (collision, edge-border attachment, container
+// bounds, the Cola engine, glyph/caption placement) reads `node.w`/`node.h` —
+// set here, once per label — instead of guessing from level. measureNodeBox()
+// must run before anything reads `.w`/`.h`: renderNodes() calls it for every
+// node up front, and a rename re-calls it (see render.js: resizeNodeBox).
+
+// Offscreen canvas 2d context, reused for all measurements (measureText doesn't
+// need a context attached to the DOM).
+let _measureCtx = null;
+function measureCtx() {
+  if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d');
+  return _measureCtx;
+}
+
+// Width of `text` set in the SAME font the SVG <text> renders with (see
+// `.node text` / `.node.level-1 text` in style.css) — so the box matches what's
+// actually drawn, not an approximation.
+function textWidth(text, fontPx) {
+  const ctx = measureCtx();
+  ctx.font = `${fontPx}px monospace`;
+  return ctx.measureText(text || '').width;
+}
+
+// Compute and store {w, h} on the node itself, fit to its label (clamped to
+// [level floor, NODE_MAX_W]). Mutates `node` in place and returns it.
+export function measureNodeBox(node) {
+  const small  = node.level >= 1;
+  const minW   = small ? NODE_W_SM : NODE_W;
+  const fontPx = small ? 11 : 13; // must match style.css .node / .node.level-1 text
+  node.w = Math.min(NODE_MAX_W, Math.max(minW, textWidth(node.label, fontPx) + NODE_TEXT_PAD * 2));
+  node.h = small ? NODE_H_SM : NODE_H;
+  return node;
+}
 
 // ─── Container collision geometry ──────────────────────────────────────────────
 
@@ -12,10 +54,18 @@ export function containerCenter(b) {
 }
 
 // Collision radius for a container — the circle that circumscribes its box, plus
-// the perimeter margin. Analogous to COLLISION_RADIUS for a node, but sized to
+// the perimeter margin. Analogous to nodeCollisionRadius() below, but sized to
 // the box so it grows/shrinks with the container.
 export function containerRadius(b) {
   return 0.5 * Math.hypot(b.w, b.h) + CONTAINER_MARGIN;
+}
+
+// Collision radius for a leaf/collapsed node — the circle circumscribing its
+// OWN text-fit box (node.w/node.h from measureNodeBox), plus a clearance
+// margin. The node analogue of containerRadius above: a wider box (longer
+// label) claims proportionally more space instead of a flat radius.
+export function nodeCollisionRadius(node) {
+  return 0.5 * Math.hypot(node.w, node.h) + NODE_COLLISION_MARGIN;
 }
 
 // ─── Viewport ─────────────────────────────────────────────────────────────────
@@ -68,14 +118,16 @@ export function initialPosition(node, allNodes) {
 // ─── Node border geometry ──────────────────────────────────────────────────────
 
 // Returns the border centre + half-extents for a node in SVG space.
-// Container nodes use their computed bounding rect instead of the fixed box.
+// Container nodes use their computed bounding rect instead of their own box.
 export function nodeBorderInfo(node) {
   if (node.containerBounds) {
     const b = node.containerBounds;
     return { cx: b.x + b.w / 2, cy: b.y + b.h / 2, hw: b.w / 2, hh: b.h / 2 };
   }
-  const hw = (node.level >= 1 ? NODE_W_SM : NODE_W) / 2;
-  const hh = (node.level >= 1 ? NODE_H_SM : NODE_H) / 2;
+  // node.w/.h are set by measureNodeBox (renderNodes / rename); the level-based
+  // fallback only matters for a node that hasn't been through that yet.
+  const hw = (node.w ?? (node.level >= 1 ? NODE_W_SM : NODE_W)) / 2;
+  const hh = (node.h ?? (node.level >= 1 ? NODE_H_SM : NODE_H)) / 2;
   return { cx: node.x, cy: node.y, hw, hh };
 }
 

@@ -46,6 +46,17 @@ function fieldRow(f) {
   controls.className = 'cfg-controls';
   row.appendChild(controls);
 
+  // Booleans render as a checkbox (always valid → no hint/validation flow).
+  if (f.type === 'bool') {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'cfg-input cfg-checkbox';
+    box.checked = !!configValue(f.key);
+    box.addEventListener('change', () => setConfig(f.key, box.checked));
+    controls.appendChild(box);
+    return row;
+  }
+
   let input, swatch;
   if (f.type === 'enum') {
     input = document.createElement('select');
