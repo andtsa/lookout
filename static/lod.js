@@ -122,18 +122,29 @@ export function globalCollapse() {
 // "Focus mode is always on": on a dense graph edges are faded by default and you
 // focus node(s) to reveal their connections. An edge is "exposed" (full opacity,
 // physics-active) when:
-//   • the graph is sparse (few edges) — focusing would be pointless, so show all; OR
-//   • at least one of its endpoints is currently focused.
-// With no node focused on a non-sparse graph, every edge is faded — that is the
-// intended resting state (declutters a dense graph). Focusing reveals a subgraph;
-// Esc clears focus and fades everything back.
+//   • one or more nodes ARE focused — only edges touching a focused node are
+//     exposed, full stop. This overrides the sparse bypass below: focusing is a
+//     deliberate "show me just this" action, so it should never be diluted by
+//     "well the graph's sparse, here's everything anyway."
+//   • otherwise (nothing focused): the graph is sparse (few edges) — focusing
+//     would be pointless, so show all; else every edge is faded — the intended
+//     resting state (declutters a dense graph).
+// Esc clears focus and returns to that resting state.
 
 export function isEdgeExposed(edge) {
-  // Sparse graphs expose everything regardless of focus state.
-  if (graphIsSparse) return true;
-  // Otherwise an edge is exposed only when at least one endpoint is focused.
-  // (No focus → all faded: the default decluttered state.)
-  return focusedNodeIds.has(edge.from) || focusedNodeIds.has(edge.to);
+  if (focusedNodeIds.size > 0) {
+    // Compare against each endpoint's VISIBLE PROXY, not just its raw id.
+    // Rendering draws a hidden node's edges as touching its nearest visible
+    // ancestor (getVisibleProxy) — e.g. a collapsed container stands in for
+    // all its hidden children. Without this, focusing that container would
+    // never expose an edge owned by one of its (hidden) children, even though
+    // the drawn line visibly touches the focused container.
+    const fromId = getVisibleProxy(edge.from)?.id ?? edge.from;
+    const toId   = getVisibleProxy(edge.to)?.id ?? edge.to;
+    return focusedNodeIds.has(edge.from) || focusedNodeIds.has(edge.to)
+        || focusedNodeIds.has(fromId)    || focusedNodeIds.has(toId);
+  }
+  return graphIsSparse;
 }
 
 // ─── Label phantom-node radius ────────────────────────────────────────────────
