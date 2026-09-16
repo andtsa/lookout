@@ -17,6 +17,7 @@ import { initialPosition } from './geometry.js';
 import {
   isNodeVisible, globalExpand, globalCollapse,
   isLeafNode, expandNode, collapseDeepestIn, flashLeaf,
+  MAX_ANCESTOR_WALK, noteCycle,
 } from './lod.js';
 import { initLabelNodes, buildSimulation, centerGraph, scheduleCenterGraph } from './simulation.js';
 import { runColaLayout } from './layout-cola.js';
@@ -167,8 +168,13 @@ function placeNestedClusters() {
       node.y = node.pin.y;
       continue;
     }
+    // Nearest non-nested ancestor = the mount this inner map hangs off. Capped:
+    // a self-parented node would otherwise spin here forever, and this runs
+    // during init() before the first paint — so the tab would hang white.
     let a = nodes[node.parent];
-    while (a && a.nested) a = nodes[a.parent];
+    let steps = 0;
+    while (a && a.nested && steps++ <= MAX_ANCESTOR_WALK) a = nodes[a.parent];
+    if (a && a.nested) { noteCycle(node.id); continue; }  // never reached a mount
     if (!a) continue;
     (groups[a.id] ||= []).push(node);
   }

@@ -102,13 +102,23 @@ fn is_false(b: &bool) -> bool {
 
 // ─── Parse ──────────────────────────────────────────────────────────────────
 
-pub fn parse_intent(yaml_str: &str) -> Result<(NodeGraph, ProjectConfig), serde_yaml::Error> {
+/// Parse one map file. The third tuple element carries non-fatal structural
+/// complaints (currently duplicate node ids); `check` promotes them to errors.
+pub fn parse_intent(
+    yaml_str: &str,
+) -> Result<(NodeGraph, ProjectConfig, Vec<String>), serde_yaml::Error> {
     let config: IntentConfig = serde_yaml::from_str(yaml_str)?;
 
     let mut graph = NodeGraph::new();
+    let mut warnings = Vec::new();
 
-    for (id, node) in &config.nodes {
-        flatten_node(id, node, None, 0, &mut graph);
+    // `nodes` is a HashMap, so walk it in key order: with duplicate ids the
+    // *first* definition wins, and without a stable order which one that is
+    // (and the resulting graph) would vary run to run.
+    let mut root_ids: Vec<&String> = config.nodes.keys().collect();
+    root_ids.sort();
+    for id in root_ids {
+        flatten_node(id, &config.nodes[id], None, 0, &mut graph, &mut warnings);
     }
 
     mark_missing_sources(&mut graph, &config.project.root);
@@ -132,17 +142,38 @@ pub fn parse_intent(yaml_str: &str) -> Result<(NodeGraph, ProjectConfig), serde_
         graph.edges.insert(id, edge);
     }
 
-    Ok((graph, config.project))
+    Ok((graph, config.project, warnings))
 }
 
+/// Flatten one intent node and its subtree into `graph`. Returns `false` when the
+/// node was rejected as a duplicate, so the caller can keep it out of its own
+/// `children` list.
 fn flatten_node(
     id: &str,
     intent: &IntentNode,
     parent: Option<String>,
     level: u32,
     graph: &mut NodeGraph,
-) {
-    let child_ids: Vec<String> = intent.children.keys().cloned().collect();
+    warnings: &mut Vec<String>,
+) -> bool {
+    // Node ids are global across a map file — edges reference bare keys, so keys
+    // are never namespaced by their path. A repeated key therefore overwrites the
+    // node already under it. When the repeat is a *descendant* of the node it
+    // collides with, the survivor inherits `parent: <itself>`, and every ancestor
+    // walk over that node spins forever. Keep the first definition, reject the
+    // rest, and report it.
+    if graph.nodes.contains_key(id) {
+        let context = match &parent {
+            Some(p) => format!(" (redefined as a child of '{p}')"),
+            None => String::new(),
+        };
+        warnings.push(format!(
+            "duplicate node id '{id}'{context} — ids must be unique across the whole \
+             map file; keeping the first definition and ignoring this one"
+        ));
+        return false;
+    }
+
     let label_overridden = intent.label.is_some();
 
     // Split the `source: file::Name` shorthand into a plain path + symbol name.
@@ -176,7 +207,9 @@ fn flatten_node(
         pin: intent.pin.clone(),
         intent_pin: intent.pin.clone(),
         pin_from_state: false, // set true in main.rs/reload.rs when state applies a pin
-        children: child_ids,
+        // Filled in after the recursion below, from the children that survive
+        // duplicate rejection.
+        children: Vec::new(),
         derive_children: intent.derive_children,
         derived: false,
         nested: false,
@@ -188,9 +221,23 @@ fn flatten_node(
 
     graph.nodes.insert(id.to_string(), node);
 
-    for (child_id, child) in &intent.children {
-        flatten_node(child_id, child, Some(id.to_string()), level + 1, graph);
+    // Recurse first, then record only the children that were actually inserted.
+    // A rejected duplicate must not survive in `children` either — that would
+    // reintroduce the very cycle we just refused, pointing the other way.
+    let mut child_ids: Vec<&String> = intent.children.keys().collect();
+    child_ids.sort();
+    let mut kept = Vec::with_capacity(child_ids.len());
+    for child_id in child_ids {
+        let child = &intent.children[child_id];
+        if flatten_node(child_id, child, Some(id.to_string()), level + 1, graph, warnings) {
+            kept.push(child_id.clone());
+        }
     }
+    if let Some(inserted) = graph.nodes.get_mut(id) {
+        inserted.children = kept;
+    }
+
+    true
 }
 
 /// Split a `source` value into (file path, symbol name). `"a/b.rs::foo"` →
@@ -240,7 +287,7 @@ fn compose_inner(
 
     let yaml = std::fs::read_to_string(config_path)
         .map_err(|e| format!("cannot read '{config_path}': {e}"))?;
-    let (mut graph, project) =
+    let (mut graph, project, parse_warnings) =
         parse_intent(&yaml).map_err(|e| format!("failed to parse '{config_path}': {e}"))?;
 
     let outer_root = resolved_root(config_path, &project);
@@ -250,7 +297,13 @@ fn compose_inner(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let mut warnings = Vec::new();
+    // Qualify per-file complaints with their source path — a composed map spans
+    // many files, and "duplicate node id 'codegen'" is only actionable with the
+    // file that declared it.
+    let mut warnings: Vec<String> = parse_warnings
+        .into_iter()
+        .map(|w| format!("{config_path}: {w}"))
+        .collect();
 
     // Snapshot mounts up front so the recursive splice doesn't borrow `graph`.
     let mounts: Vec<(String, String, bool)> = graph
@@ -528,6 +581,48 @@ edges:
         parse_intent(yaml).expect("parse").0
     }
 
+    /// A child that repeats an ancestor's key used to overwrite that ancestor,
+    /// leaving it as its own parent — a cycle that hung every ancestor walk in
+    /// the frontend before the first paint. The duplicate must be rejected.
+    #[test]
+    fn duplicate_child_id_rejected_without_creating_a_cycle() {
+        let yaml = r#"
+project: { root: . }
+nodes:
+  codegen:
+    label: Code generator
+    children:
+      codegen: { label: fesa-codegen }
+      other:   { label: Other }
+"#;
+        let (g, _, warnings) = parse_intent(yaml).unwrap();
+
+        // The container survives; the colliding child is dropped.
+        assert_eq!(g.nodes["codegen"].label, "Code generator");
+        assert_eq!(g.nodes["codegen"].parent, None, "must not become its own parent");
+        assert!(
+            !g.nodes["codegen"].children.contains(&"codegen".to_string()),
+            "a rejected duplicate must not survive in `children` either"
+        );
+        assert_eq!(g.nodes["codegen"].children, vec!["other".to_string()]);
+        assert_eq!(g.nodes["other"].parent.as_deref(), Some("codegen"));
+        assert_eq!(g.nodes.len(), 2);
+
+        assert_eq!(warnings.len(), 1, "the clash must be reported");
+        assert!(
+            warnings[0].contains("duplicate node id 'codegen'"),
+            "unhelpful warning: {}",
+            warnings[0]
+        );
+    }
+
+    /// Unique ids nested at any depth stay untouched by the duplicate check.
+    #[test]
+    fn distinct_ids_produce_no_warnings() {
+        let (_, _, warnings) = parse_intent(SAMPLE).unwrap();
+        assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+    }
+
     #[test]
     fn level_derived_from_depth() {
         let g = parse(SAMPLE);
@@ -567,9 +662,9 @@ edges:
     /// The load-bearing test: parse → serialize → parse must preserve the graph.
     #[test]
     fn roundtrip_preserves_graph() {
-        let (g1, p1) = parse_intent(SAMPLE).unwrap();
+        let (g1, p1, _) = parse_intent(SAMPLE).unwrap();
         let yaml = serialize_intent(&g1, &p1).unwrap();
-        let (g2, _) = parse_intent(&yaml).unwrap();
+        let (g2, _, _) = parse_intent(&yaml).unwrap();
 
         assert_eq!(g1.nodes.len(), g2.nodes.len());
         assert_eq!(g1.edges.len(), g2.edges.len());
@@ -594,7 +689,7 @@ edges:
     /// Serialized intent must never leak derived fields.
     #[test]
     fn serialize_omits_derived_fields() {
-        let (g, p) = parse_intent(SAMPLE).unwrap();
+        let (g, p, _) = parse_intent(SAMPLE).unwrap();
         let yaml = serialize_intent(&g, &p).unwrap();
         for field in ["level:", "origin:", "pin:", "levels:"] {
             assert!(!yaml.contains(field), "leaked `{field}` into intent output");
@@ -615,7 +710,7 @@ nodes:
     source: src/
     derive_children: true
 "#;
-        let (g, p) = parse_intent(yaml).unwrap();
+        let (g, p, _) = parse_intent(yaml).unwrap();
         assert!(g.nodes["d"].derive_children);
         let out = serialize_intent(&g, &p).unwrap();
         assert!(

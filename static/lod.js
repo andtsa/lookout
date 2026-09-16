@@ -5,13 +5,42 @@
 import { nodes, edges, labelNodes, focusedNodeIds, graphIsSparse } from './state.js';
 import { EXPAND_JITTER, LABEL_RADIUS_MIN, LABEL_RADIUS_PER_CHAR } from './constants.js';
 
+// ─── Cycle safety ─────────────────────────────────────────────────────────────
+// Every walk below follows `parent` (or `children`) links until it runs out of
+// graph. A malformed map can close that chain into a loop — a node that is its
+// own ancestor — and an unguarded walk then spins the main thread forever, which
+// looks like the tab hanging before anything paints. The server rejects the
+// duplicate ids that cause this, but the frontend must not be the thing that
+// hangs when it meets a bad graph anyway: cap every walk, treat a node on a
+// cycle as not visible (so it drops out of layout and render), and say so once.
+
+export const MAX_ANCESTOR_WALK = 512;
+
+const reportedCycles = new Set();
+
+export function noteCycle(nodeId) {
+  if (reportedCycles.has(nodeId)) return;
+  reportedCycles.add(nodeId);
+  console.warn(
+    `[vgraphtree] node '${nodeId}' sits on a parent/children cycle — skipping it. ` +
+    `The map is malformed; run \`lookout check\` for the offending id.`);
+}
+
 // ─── Visibility predicates ────────────────────────────────────────────────────
 
+// Visible iff every ancestor up to the root is expanded. Iterative rather than
+// recursive so a cycle hits the step cap instead of blowing the stack.
 export function isNodeVisible(node) {
-  if (!node.parent) return true;
-  const parent = nodes[node.parent];
-  if (!parent) return true;
-  return parent.expandedDepth >= 1 && isNodeVisible(parent);
+  let n = node;
+  for (let steps = 0; steps <= MAX_ANCESTOR_WALK; steps++) {
+    if (!n.parent) return true;
+    const parent = nodes[n.parent];
+    if (!parent) return true;            // dangling ref → treat as a root
+    if (parent.expandedDepth < 1) return false;
+    n = parent;
+  }
+  noteCycle(node.id);
+  return false;
 }
 
 export function isLeafNode(node) {
@@ -19,13 +48,17 @@ export function isLeafNode(node) {
 }
 
 // All currently visible descendants (used for container bounds & cluster drag).
-export function visibleDescendants(node) {
+// `seen` guards the children direction: a node that reappears under itself would
+// otherwise recurse until the stack gives out.
+export function visibleDescendants(node, seen = new Set()) {
   const result = [];
+  if (seen.has(node.id)) { noteCycle(node.id); return result; }
+  seen.add(node.id);
   for (const cid of (node.children || [])) {
     const c = nodes[cid];
     if (c && isNodeVisible(c)) {
       result.push(c);
-      result.push(...visibleDescendants(c));
+      result.push(...visibleDescendants(c, seen));
     }
   }
   return result;
@@ -34,10 +67,11 @@ export function visibleDescendants(node) {
 // Walk up the parent chain to find the nearest visible ancestor (or self).
 export function getVisibleProxy(nodeId) {
   let node = nodes[nodeId];
-  while (node) {
+  for (let steps = 0; node && steps <= MAX_ANCESTOR_WALK; steps++) {
     if (isNodeVisible(node)) return node;
     node = nodes[node.parent];
   }
+  if (node) noteCycle(nodeId);   // ran out of steps, not out of ancestors
   return null;
 }
 

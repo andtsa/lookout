@@ -6,7 +6,7 @@ import {
 } from './state.js';
 import { renderDebug } from './debug.js';
 import { getViewportSize, zoneToCoords, getEdgeEndpoints, containerCenter, containerRadius, nodeCollisionRadius } from './geometry.js';
-import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdgeExposed } from './lod.js';
+import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdgeExposed, MAX_ANCESTOR_WALK } from './lod.js';
 import { updateContainers, rerenderEdges } from './render.js';
 import {
   CHARGE_LABEL_FACTOR, CHARGE_CONTAINER_PER_CHILD, CHARGE_CONTAINER_MIN,
@@ -188,8 +188,11 @@ export function buildSimulation(alpha = 1) {
       if (!containers.length) return;
       const under = (nodeId, contId) => {
         let n = nodes[nodeId];
-        while (n) { if (n.id === contId) return true; n = n.parent ? nodes[n.parent] : null; }
-        return false;
+        for (let steps = 0; n && steps <= MAX_ANCESTOR_WALK; steps++) {
+          if (n.id === contId) return true;
+          n = n.parent ? nodes[n.parent] : null;
+        }
+        return false;  // ran out of ancestors, or the chain loops
       };
       for (const ln of visLabelNodes) {
         const e = edges[ln.edgeId];
