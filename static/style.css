@@ -335,6 +335,36 @@ body {
 #discard-btn:hover { border-color: var(--focus); }
 #discard-btn[hidden] { display: none; }
 
+/* Scope breadcrumbs (top centre) */
+#scope-bar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 360px);
+  overflow-x: auto;
+  white-space: nowrap;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-faint);
+  z-index: 100;
+}
+#scope-bar[hidden] { display: none; }
+.scope-crumb {
+  background: none;
+  border: none;
+  padding: 1px 3px;
+  font: inherit;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.scope-crumb:hover { color: var(--accent-light); }
+.scope-crumb:disabled { color: var(--accent); cursor: default; }
+
 /* Force debug overlay (toggle with D) */
 #debug-indicator { color: #e0602c; font-size: 10px; }
 #debug-indicator[hidden] { display: none; }

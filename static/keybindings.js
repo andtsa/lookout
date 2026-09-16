@@ -58,6 +58,16 @@ export const KEY_BINDINGS = [
     run: (e, cx) => { if (e.key === 'c' || e.key === 'C') cx.collapseHovered(); else cx.expandHovered(); },
   },
   {
+    combo: 'Enter', desc: 'go into hovered node, hiding everything outside it (like `cd`)',
+    match: e => e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey,
+    run: (e, cx) => cx.enterHovered(),
+  },
+  {
+    combo: 'Backspace', desc: 'go up one level out of the current node (like `cd ..`)',
+    match: e => e.key === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey,
+    run: (e, cx) => { e.preventDefault(); cx.leaveScope(); },
+  },
+  {
     combo: 'P', desc: 'open config panel',
     match: e => (e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey,
     run: (e, cx) => cx.toggleConfigPanel(),
@@ -89,7 +99,7 @@ export const POINTER_HINTS = [
   { combo: 'Shift+drag',            desc: 'pin a node to a fixed position (right click and choose "unpin" to let it float dynamically again)' },
   { combo: 'Alt+click',             desc: 'focus a specific node, revealing its incoming and outgoing edges' },
   { combo: 'Dbl-click',             desc: 'open source directory/file/symbol of this node' },
-  { combo: 'Right-click',           desc: 'rename/unpin a node' },
+  { combo: 'Right-click',           desc: 'go into/rename/unpin a node' },
   { combo: 'Click edge',            desc: 'annotate an edge, or edit the label' },
 ];
 

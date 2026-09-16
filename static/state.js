@@ -58,6 +58,11 @@ export function clearFocus() {
   return true;
 }
 
+// Scope ("cd into a node"): when set, only the subtree strictly below this node
+// is shown, and its children act as the graph's top level. null = whole graph.
+export let scopeRootId = null;
+export function setScopeRootId(v) { scopeRootId = v; }
+
 export function setNodes(v)             { nodes = v; }
 export function setEdges(v)             { edges = v; }
 export function setSourceToNode(v)      { sourceToNode = v; }

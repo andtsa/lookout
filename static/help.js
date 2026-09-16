@@ -10,9 +10,10 @@ const CONCEPTS = [
   ['Layout engines', 'There two engines to pick from: a force-simulation (D3) engine, and a constraint-based engine (Cola). Toggle which one is used with `L`. Cola has three modes, you can cycle between them with `K`: "layered" orders the graph top-down, radial centre -> outward, and stress is undirected.'],
   ['Focus mode', 'On a dense graph edges are faded by default; Alt+click a node to reveal just its connections, Esc to clear. Sparse graphs (few edges) show everything with no focus needed.'],
   ['Level of detail', 'Alt+scroll a node or hovering over it and pressing `e` / `c` will expand / collapse its children. Shift+E / Shift+C expands / collapses the whole graph.'],
+  ['Scope', 'Hover a node and press `Enter` (or right-click → Go into) to show only its subgraph, like `cd`. `Backspace` goes up a level; the breadcrumb bar at the top jumps to any ancestor. The scope is kept in the URL, so refresh and browser back/forward work.'],
   ['Descriptions', 'Nodes and edges can carry a description. Hover to see it in a popup (after a short settle delay), or switch node descriptions to inline captions in the config panel.'],
   ['Config panel', 'P opens the settings panel, with engine, layout / physics parameters, colours, and behaviour. Changes apply live and persist to a per-project .vgraphtree.config.yaml.'],
-  ['Editing', 'Right-click a node to rename / unpin, double-click to open its source, click an edge to annotate it, Shift+drag to pin. Ctrl+S saves; the discard button reloads from disk.'],
+  ['Editing', 'Right-click a node to go into / rename / unpin, double-click to open its source, click an edge to annotate it, Shift+drag to pin. Ctrl+S saves; the discard button reloads from disk.'],
 ];
 
 const panel = () => document.getElementById('help-panel');

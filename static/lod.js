@@ -2,7 +2,7 @@
 // Pure state mutations — no render calls.  Callers are responsible for
 // calling refreshVisibility() (in app.js) after any mutation.
 
-import { nodes, edges, labelNodes, focusedNodeIds, graphIsSparse } from './state.js';
+import { nodes, edges, labelNodes, focusedNodeIds, graphIsSparse, scopeRootId } from './state.js';
 import { EXPAND_JITTER, LABEL_RADIUS_MIN, LABEL_RADIUS_PER_CHAR } from './constants.js';
 
 // ─── Cycle safety ─────────────────────────────────────────────────────────────
@@ -30,17 +30,39 @@ export function noteCycle(nodeId) {
 
 // Visible iff every ancestor up to the root is expanded. Iterative rather than
 // recursive so a cycle hits the step cap instead of blowing the stack.
+// With a scope set, the walk must reach the scope root instead (which counts as
+// expanded); the scope root itself and everything outside it are hidden.
 export function isNodeVisible(node) {
+  if (node.id === scopeRootId) return false;
   let n = node;
   for (let steps = 0; steps <= MAX_ANCESTOR_WALK; steps++) {
-    if (!n.parent) return true;
+    if (!n.parent) return scopeRootId === null;
+    if (n.parent === scopeRootId) return true;
     const parent = nodes[n.parent];
-    if (!parent) return true;            // dangling ref → treat as a root
+    if (!parent) return scopeRootId === null;  // dangling ref → treat as a root
     if (parent.expandedDepth < 1) return false;
     n = parent;
   }
   noteCycle(node.id);
   return false;
+}
+
+// The parent as far as layout is concerned: none for the top level, which under
+// a scope is the scope root's children.
+export function layoutParent(node) {
+  if (!node.parent || node.parent === scopeRootId) return null;
+  return nodes[node.parent] || null;
+}
+
+// Ancestor chain of a node, root first, ending at the node itself.
+export function ancestorChain(nodeId) {
+  const chain = [];
+  let n = nodes[nodeId];
+  for (let steps = 0; n && steps <= MAX_ANCESTOR_WALK; steps++) {
+    chain.unshift(n);
+    n = n.parent ? nodes[n.parent] : null;
+  }
+  return chain;
 }
 
 export function isLeafNode(node) {

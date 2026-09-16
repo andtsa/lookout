@@ -281,6 +281,7 @@ export function showContextMenu(event, d) {
   // position is editable — so unpin (reset to auto-placement) still applies.
   document.getElementById('ctx-rename').style.display = d.nested ? 'none' : 'block';
   document.getElementById('ctx-unpin').style.display = d.pin ? 'block' : 'none';
+  document.getElementById('ctx-enter').style.display = isLeafNode(d) ? 'none' : 'block';
 }
 
 export function hideContextMenu() {
@@ -307,6 +308,13 @@ document.getElementById('ctx-unpin').addEventListener('click', () => {
   patchNode(d.id, { pin: null });
 });
 
+document.getElementById('ctx-enter').addEventListener('click', () => {
+  if (!ctxNode) return;
+  const d = ctxNode;
+  hideContextMenu();
+  if (_enterScopeFn) _enterScopeFn(d);
+});
+
 document.getElementById('ctx-open-source').addEventListener('click', () => {
   if (!ctxNode) return;
   const d = ctxNode;
@@ -323,11 +331,14 @@ svg.on('click.context', hideContextMenu);
 // context menu — outside setupNodeInteractions' closure) can also trigger a
 // relayout after resizing a node's box.
 let _refreshFn = null;
+let _enterScopeFn = null;
 
-// refreshFn = app.js's refreshVisibility, passed as a callback to avoid
-// an import cycle (interaction.js → app.js → interaction.js).
-export function setupNodeInteractions(refreshFn) {
+// refreshFn = app.js's refreshVisibility, enterScopeFn = app.js's enterScope —
+// passed as callbacks to avoid an import cycle (interaction.js → app.js →
+// interaction.js).
+export function setupNodeInteractions(refreshFn, enterScopeFn) {
   _refreshFn = refreshFn;
+  _enterScopeFn = enterScopeFn;
   const allNodes = nodeLayer.selectAll('.node');
 
   // Drag
@@ -400,7 +411,7 @@ export function setupNodeInteractions(refreshFn) {
     if (d.source) toggleCodePanel(d);
   });
 
-  // Right-click: context menu (rename, unpin, open source).
+  // Right-click: context menu (go into, rename, unpin, open source).
   allNodes.on('contextmenu', (event, d) => {
     event.preventDefault();
     showContextMenu(event, d);

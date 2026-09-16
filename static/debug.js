@@ -11,7 +11,7 @@
 
 import { nodes, debugLayer, simulation } from './state.js';
 import { zoneToCoords, containerCenter, containerRadius, nodeCollisionRadius } from './geometry.js';
-import { isNodeVisible } from './lod.js';
+import { isNodeVisible, layoutParent } from './lod.js';
 
 const VEL_SCALE = 8; // px drawn per unit of per-tick velocity
 
@@ -19,7 +19,7 @@ const VEL_SCALE = 8; // px drawn per unit of per-tick velocity
 function targetOf(n) {
   if (n.pin)  return { x: n.pin.x, y: n.pin.y, kind: 'pin' };
   if (n.zone) { const t = zoneToCoords(n.zone); return { x: t.x, y: t.y, kind: 'zone' }; }
-  const p = n.parent && nodes[n.parent];
+  const p = layoutParent(n);
   if (p && p.pin) return { x: p.pin.x, y: p.pin.y, kind: 'parent' };
   return null; // only weak center gravity — not worth drawing
 }

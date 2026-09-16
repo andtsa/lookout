@@ -10,6 +10,7 @@ import {
   setParentDisplayMode, parentDisplayMode, clearFocus,
   setDebugMode, debugMode, hoveredNodeId,
   layoutEngine, setLayoutEngine, colaMode, setColaMode, COLA_MODES,
+  scopeRootId, setScopeRootId, focusedNodeIds,
 } from './state.js';
 import { renderDebug, clearDebug } from './debug.js';
 import { NESTED_SCALE, FOCUS_REHEAT_ALPHA } from './constants.js';
@@ -17,7 +18,7 @@ import { initialPosition } from './geometry.js';
 import {
   isNodeVisible, globalExpand, globalCollapse,
   isLeafNode, expandNode, collapseDeepestIn, flashLeaf,
-  MAX_ANCESTOR_WALK, noteCycle,
+  MAX_ANCESTOR_WALK, noteCycle, ancestorChain,
 } from './lod.js';
 import { initLabelNodes, buildSimulation, centerGraph, scheduleCenterGraph } from './simulation.js';
 import { runColaLayout } from './layout-cola.js';
@@ -85,6 +86,78 @@ function updateEngineIndicator() {
     : 'engine: force';
 }
 
+// ─── Scope ("cd" into a node) ───────────────────────────────────────────────
+// Entering a node hides everything outside its subtree and promotes its children
+// to the top level. The scope lives in the URL hash (#scope=<id>) so a refresh
+// keeps you where you were, and browser back/forward walk the scope history.
+
+function scopeFromHash() {
+  const m = /^#scope=(.*)$/.exec(window.location.hash);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// Apply a scope (null = whole graph). `push` records it in browser history;
+// popstate / init apply a scope that's already in the URL, so they don't.
+function setScope(id, { push = true } = {}) {
+  if (id !== null && (!nodes[id] || isLeafNode(nodes[id]))) id = null;
+  if (id === scopeRootId) return;
+  const prev = scopeRootId;
+  setScopeRootId(id);
+
+  // Going up: expand the path from the new scope down to the node we came out
+  // of, so its contents stay in view and it's obvious where you were.
+  if (prev !== null && nodes[prev]) {
+    const chain = ancestorChain(prev);
+    const start = id === null ? 0 : chain.findIndex(n => n.id === id) + 1;
+    if (start > 0 || id === null) chain.slice(start).forEach(expandNode);
+  }
+  // Focus on nodes that are now out of scope would silently dim every edge.
+  for (const fid of [...focusedNodeIds]) {
+    if (!nodes[fid] || !isNodeVisible(nodes[fid])) focusedNodeIds.delete(fid);
+  }
+
+  if (push) {
+    const hash = id === null ? '' : `#scope=${encodeURIComponent(id)}`;
+    history.pushState(null, '', `${location.pathname}${location.search}${hash}`);
+  }
+  renderScopeBar();
+  refreshVisibility(1);
+  scheduleCenterGraph();
+}
+
+function enterScope(d) {
+  if (isLeafNode(d)) { flashLeaf(d.id); return; }
+  setScope(d.id);
+}
+
+function leaveScope() {
+  if (scopeRootId === null) return;
+  setScope(nodes[scopeRootId]?.parent ?? null);
+}
+
+// Breadcrumb bar: root / ancestor / … / scope, each segment clickable.
+function renderScopeBar() {
+  const bar = document.getElementById('scope-bar');
+  bar.replaceChildren();
+  bar.hidden = scopeRootId === null;
+  if (scopeRootId === null) return;
+  const crumb = (label, id) => {
+    const b = document.createElement('button');
+    b.className = 'scope-crumb';
+    b.textContent = label;
+    if (id === scopeRootId) b.disabled = true;
+    else b.addEventListener('click', () => { setScope(id); svg.node().focus(); });
+    bar.appendChild(b);
+  };
+  crumb('/', null);
+  ancestorChain(scopeRootId).forEach((n, i) => {
+    if (i > 0) bar.appendChild(document.createTextNode(' / '));
+    crumb(n.label, n.id);
+  });
+}
+
+window.addEventListener('popstate', () => setScope(scopeFromHash(), { push: false }));
+
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
 // All bindings and their help text live in keybindings.js. Here we only supply
 // the actions they invoke (the context object), then hand off to the dispatcher.
@@ -128,6 +201,8 @@ const keyContext = {
     collapseDeepestIn(d);
     refreshVisibility();
   },
+  enterHovered: () => { const d = nodes[hoveredNodeId]; if (d) enterScope(d); },
+  leaveScope,
   // Switch layout engine (force ↔ cola) and relayout.
   toggleEngine: () => {
     setLayoutEngine(layoutEngine === 'cola' ? 'force' : 'cola');
@@ -240,6 +315,16 @@ async function init() {
   }
   placeNestedClusters();
 
+  // Restore the scope from the URL before the first render / layout, so a
+  // refresh inside a subgraph never flashes the whole graph.
+  const initialScope = scopeFromHash();
+  if (initialScope !== null && nodes[initialScope] && !isLeafNode(nodes[initialScope])) {
+    setScopeRootId(initialScope);
+  } else if (initialScope !== null) {
+    history.replaceState(null, '', `${location.pathname}${location.search}`);
+  }
+  renderScopeBar();
+
   initLabelNodes();
   renderNodes();
   renderEdges();
@@ -252,7 +337,7 @@ async function init() {
 
   // Wire up node/edge interactions, passing refreshVisibility as a callback
   // so interaction.js does not need to import app.js (which would be circular).
-  setupNodeInteractions(refreshVisibility);
+  setupNodeInteractions(refreshVisibility, enterScope);
   setupEdgeInteractions();
 
   // Render the config panel, and relayout when a non-colour setting changes

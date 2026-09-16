@@ -6,7 +6,7 @@ import {
 } from './state.js';
 import { renderDebug } from './debug.js';
 import { getViewportSize, zoneToCoords, getEdgeEndpoints, containerCenter, containerRadius, nodeCollisionRadius } from './geometry.js';
-import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdgeExposed, MAX_ANCESTOR_WALK } from './lod.js';
+import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdgeExposed, layoutParent, MAX_ANCESTOR_WALK } from './lod.js';
 import { updateContainers, rerenderEdges } from './render.js';
 import {
   CHARGE_LABEL_FACTOR, CHARGE_CONTAINER_PER_CHILD, CHARGE_CONTAINER_MIN,
@@ -89,8 +89,7 @@ export function buildSimulation(alpha = 1) {
   // The effective pin of a node's parent, if the parent has one. Such nodes are
   // anchored to that pin instead of the viewport centre.
   const parentPinOf = (n) => {
-    if (!n || !n.parent) return null;
-    const p = nodes[n.parent];
+    const p = n && layoutParent(n);
     return p && p.pin ? p.pin : null;
   };
 
@@ -253,11 +252,12 @@ export function centerGraph() {
   const { w: viewW, h: viewH } = getViewportSize();
   if (viewW < 50) return;
 
-  const level0 = Object.values(nodes).filter(n => n.level === 0);
-  if (level0.length === 0) return;
+  // The current top level: level 0, or the scope root's children when scoped.
+  const top = Object.values(nodes).filter(n => isNodeVisible(n) && !layoutParent(n));
+  if (top.length === 0) return;
 
-  const xs    = level0.map(n => n.x);
-  const ys    = level0.map(n => n.y);
+  const xs    = top.map(n => n.x);
+  const ys    = top.map(n => n.y);
   const minX  = Math.min(...xs) - CENTER_PAD;
   const maxX  = Math.max(...xs) + CENTER_PAD;
   const minY  = Math.min(...ys) - CENTER_PAD;
