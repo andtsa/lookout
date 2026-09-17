@@ -18,6 +18,7 @@ import { getEdgeEndpoints } from './geometry.js';
 import { patchNode, patchEdge } from './api.js';
 import { openCodePanel, toggleCodePanel } from './code-panel.js';
 import { SCROLL_THRESHOLD, DRAG_THRESHOLD, FOCUS_REHEAT_ALPHA } from './constants.js';
+import { renderMarkdown } from './markdown.js';
 
 // ─── Hover tooltip (node / edge descriptions) ─────────────────────────────────
 
@@ -31,7 +32,7 @@ let _tipOwner  = null;   // 'node:<id>' / 'edge:<id>' the tip is shown or pendin
 const TIP_HIDE_GRACE_MS = 300;
 
 function showTip(text, x, y) {
-  hoverTip.textContent = text;
+  renderMarkdown(hoverTip, text);
   hoverTip.hidden = false;
   // Offset from the cursor and keep it inside the viewport.
   const left = Math.min(x + 14, window.innerWidth  - hoverTip.offsetWidth  - 8);

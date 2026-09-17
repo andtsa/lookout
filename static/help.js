@@ -4,6 +4,7 @@
 // short "concepts" docs. Toggled with ? (see the binding in keybindings.js).
 
 import { KEY_BINDINGS, POINTER_HINTS } from './keybindings.js';
+import { appendInline } from './markdown.js';
 
 // Short prose docs for the bigger ideas that aren't a single keystroke.
 const CONCEPTS = [
@@ -11,30 +12,12 @@ const CONCEPTS = [
   ['Focus mode', 'On a dense graph edges are faded by default; Alt+click a node to reveal just its connections, Esc to clear. Sparse graphs (few edges) show everything with no focus needed.'],
   ['Level of detail', 'Alt+scroll a node or hovering over it and pressing `e` / `c` will expand / collapse its children. Shift+E / Shift+C expands / collapses the whole graph.'],
   ['Scope', 'Hover a node and press `Enter` (or right-click → Go into) to show only its subgraph, like `cd`. `Backspace` goes up a level; the breadcrumb bar at the top jumps to any ancestor. The scope is kept in the URL, so refresh and browser back/forward work.'],
-  ['Descriptions', 'Nodes and edges can carry a description. Hover to see it in a popup (after a short settle delay), or switch node descriptions to inline captions in the config panel.'],
+  ['Descriptions', 'Nodes and edges can carry a description. Hover to see it in a popup (after a short settle delay), or switch node descriptions to inline captions in the config panel. Descriptions support `- ` bullet lists, `1. ` numbered lists, blank-line paragraphs and backtick code. Lists need line breaks, so write the description as a YAML literal block (`description: |`) rather than a folded one (`>-`).'],
   ['Config panel', 'P opens the settings panel, with engine, layout / physics parameters, colours, and behaviour. Changes apply live and persist to a per-project .vgraphtree.config.yaml.'],
   ['Editing', 'Right-click a node to go into / rename / unpin, double-click to open its source, click an edge to annotate it, Shift+drag to pin. Ctrl+S saves; the discard button reloads from disk.'],
 ];
 
 const panel = () => document.getElementById('help-panel');
-
-// Append prose to `el`, rendering `backtick`-delimited runs as inline code chips
-// (styled to match the key chips). Built from text nodes + <code> elements — no
-// innerHTML, so arbitrary text is safe. Use backticks in any CONCEPTS / desc
-// string to mark something as code, e.g. 'toggle with `L`' or '`.config.yaml`'.
-function appendInline(el, text) {
-  const parts = String(text).split(/`([^`]+)`/); // odd indices are the code runs
-  parts.forEach((part, i) => {
-    if (i % 2 === 1) {
-      const code = document.createElement('code');
-      code.className = 'help-code';
-      code.textContent = part;
-      el.appendChild(code);
-    } else if (part) {
-      el.appendChild(document.createTextNode(part));
-    }
-  });
-}
 
 export function initHelpPanel() {
   const p = panel();

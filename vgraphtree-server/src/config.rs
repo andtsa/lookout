@@ -229,7 +229,14 @@ fn flatten_node(
     let mut kept = Vec::with_capacity(child_ids.len());
     for child_id in child_ids {
         let child = &intent.children[child_id];
-        if flatten_node(child_id, child, Some(id.to_string()), level + 1, graph, warnings) {
+        if flatten_node(
+            child_id,
+            child,
+            Some(id.to_string()),
+            level + 1,
+            graph,
+            warnings,
+        ) {
             kept.push(child_id.clone());
         }
     }
@@ -599,7 +606,10 @@ nodes:
 
         // The container survives; the colliding child is dropped.
         assert_eq!(g.nodes["codegen"].label, "Code generator");
-        assert_eq!(g.nodes["codegen"].parent, None, "must not become its own parent");
+        assert_eq!(
+            g.nodes["codegen"].parent, None,
+            "must not become its own parent"
+        );
         assert!(
             !g.nodes["codegen"].children.contains(&"codegen".to_string()),
             "a rejected duplicate must not survive in `children` either"

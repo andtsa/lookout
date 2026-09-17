@@ -19,15 +19,27 @@ pub async fn get_file(
     State(state): State<AppState>,
     Query(params): Query<FileQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    // Reject obvious path-traversal attempts
-    if params.path.contains("..") {
+    // Confine every lookup to the project root. An absolute `path` would replace
+    // the root outright in `join` (turning this into an arbitrary-file read), so
+    // reject it alongside the usual traversal attempts.
+    if params.path.contains("..") || Path::new(&params.path).is_absolute() {
         return Err(StatusCode::FORBIDDEN);
     }
 
     // Resolved root (config-dir-relative) so lookups work from any cwd.
-    let root = state.resolved_root.as_ref().clone();
+    let root = state
+        .resolved_root
+        .canonicalize()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let full_path = root.join(&params.path);
+    // Canonicalize before use so a symlink inside the tree cannot point out of it.
+    let full_path = root
+        .join(&params.path)
+        .canonicalize()
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    if !full_path.starts_with(&root) {
+        return Err(StatusCode::FORBIDDEN);
+    }
 
     if full_path.is_dir() {
         return list_directory(&full_path, &params.path, &root);

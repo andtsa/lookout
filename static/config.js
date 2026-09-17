@@ -10,6 +10,7 @@
 // receives the merged map from GET /config.
 
 import { allFields, fieldByKey, validateField } from './config-schema.js';
+import { BASE } from './api.js';
 import { setTunable } from './constants.js';
 import { setLayoutEngine, setColaMode, setNodeDescriptionMode, setHoverTipDelay, setLabelDeclutter } from './state.js';
 
@@ -43,7 +44,7 @@ function applyField(f, v) {
 export async function loadConfig() {
   for (const f of allFields()) values[f.key] = f.default;
   try {
-    const j = await (await fetch('/config')).json();
+    const j = await (await fetch(`${BASE}/config`)).json();
     dotfilePath = j.path || '';
     for (const [k, v] of Object.entries(j.config || {})) {
       const f = fieldByKey(k);
@@ -71,7 +72,7 @@ let _persist;
 function persist() {
   clearTimeout(_persist);
   _persist = setTimeout(() => {
-    fetch('/config', {
+    fetch(`${BASE}/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ config: values }),

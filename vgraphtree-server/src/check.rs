@@ -129,7 +129,11 @@ nodes:
         graph.nodes.get_mut("a").unwrap().parent = Some("b".to_string());
         let cycles = collect_parent_cycles(&graph);
         assert_eq!(cycles.len(), 1, "one loop, reported once: {cycles:?}");
-        assert!(cycles[0].contains('a') && cycles[0].contains('b'), "{}", cycles[0]);
+        assert!(
+            cycles[0].contains('a') && cycles[0].contains('b'),
+            "{}",
+            cycles[0]
+        );
 
         // Self-parent is the degenerate case — exactly the fesa `codegen` shape.
         let (mut g2, _, _) = parse_intent(yaml).unwrap();

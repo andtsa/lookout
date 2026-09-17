@@ -1,4 +1,7 @@
-const BASE = '';
+// The frontend is served either at the server root (dev: http://localhost:7777/)
+// or under a prefix behind a reverse proxy (prod: https://host/mpe/). Derive the
+// prefix from this module's own URL so requests land on the right mount point.
+export const BASE = new URL('.', import.meta.url).pathname.replace(/\/$/, '');
 
 export async function fetchGraph() {
   const r = await fetch(`${BASE}/graph`);

@@ -85,6 +85,24 @@ and a graph in each sub-node, and so on:
           config_route: { label: Config, source: vgraphtree-server/src/routes/config.rs, description: "GET / PUT the personal config dotfile." }
 ```
 
+### descriptions
+
+node and edge descriptions support a small subset of markdown: `- ` bullet lists, `1. ` 
+numbered lists, blank lines between paragraphs, and `` `inline code` ``. nothing else is 
+interpreted (no emphasis, links, or nesting), so text like `*_agent.toml` shows as written.
+
+lists need real line breaks, so use a YAML literal block (`|`) — a folded block (`>`) joins 
+the lines into one:
+```yaml
+  relay:
+    label: Relay server
+    description: |-
+      Accepts device connections and fans traffic out to clients.
+
+      - orders packets per device
+      - replays the last snapshot to new subscribers
+```
+
 ## using this
 
 to use this, you need 2 things:

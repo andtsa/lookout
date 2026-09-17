@@ -9,6 +9,7 @@ import {
 } from './state.js';
 import { getEdgeEndpoints, measureNodeBox } from './geometry.js';
 import { isNodeVisible, visibleDescendants, getVisibleProxy, isEdgeExposed } from './lod.js';
+import { markdownToPlainText } from './markdown.js';
 
 // Symbol-kind → corner-badge glyph. Colour comes from the `symkind-*` CSS class;
 // the glyph disambiguates within a colour (e.g. class 'C' vs struct 'S'). Unknown
@@ -30,8 +31,12 @@ const glyphX   = d => -d.w / 2 + 10;
 const glyphY   = d => -d.h / 2 + 10;
 
 // Inline description caption (shown under the node in 'inline' mode). Truncated
-// so it stays a single readable line; the full text is available on hover.
-const descCaption = s => (s ? (s.length > 42 ? s.slice(0, 41) + '…' : s) : '');
+// so it stays a single readable line; the full text is available on hover. SVG
+// text can't hold markup, so markdown is flattened to plain text first.
+const descCaption = s => {
+  const t = markdownToPlainText(s || '');
+  return t.length > 42 ? t.slice(0, 41) + '…' : t;
+};
 const descY = d => d.h / 2 + 11;
 
 // ─── Node rendering ───────────────────────────────────────────────────────────

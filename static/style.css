@@ -876,6 +876,11 @@ body.desc-inline .node-desc { display: inline; }
   white-space: pre-wrap;
 }
 #hover-tip[hidden] { display: none; }
+/* Rendered description markdown (markdown.js). */
+#hover-tip p, #hover-tip ul, #hover-tip ol { margin: 0; }
+#hover-tip :is(p, ul, ol) + :is(p, ul, ol) { margin-top: 6px; }
+#hover-tip ul, #hover-tip ol { padding-left: 3.5ch; }  /* room for "10." markers */
+#hover-tip .md-code { white-space: pre-wrap; }  /* the popup is narrow — let long code wrap */
 
 /* Hovered edge — brighten the whole line so it's obvious which edge is hovered. */
 .edge-visual.edge-hover { opacity: 1; }
@@ -947,9 +952,9 @@ body.desc-inline .node-desc { display: inline; }
   accent-color: var(--accent); cursor: pointer;
 }
 
-/* Inline code chips in help prose (`backtick` runs). Matches the key chips but
-   tuned to flow inside a sentence. */
-.help-code {
+/* Inline code chips (`backtick` runs) in help prose and descriptions — see
+   markdown.js. Matches the key chips but tuned to flow inside a sentence. */
+.md-code {
   font: 0.9em ui-monospace, monospace;
   color: var(--text-primary);
   background: var(--bg-deep);

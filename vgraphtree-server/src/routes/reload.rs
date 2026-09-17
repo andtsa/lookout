@@ -8,7 +8,10 @@ use serde_json::{json, Value};
 /// `only_if_clean`, the swap is skipped when the in-memory graph has unsaved
 /// edits, so a background refresh never clobbers work in progress. Returns
 /// `Ok(None)` when skipped, else the new (node, edge) counts.
-pub fn load_from_disk(state: &AppState, only_if_clean: bool) -> Result<Option<(usize, usize)>, String> {
+pub fn load_from_disk(
+    state: &AppState,
+    only_if_clean: bool,
+) -> Result<Option<(usize, usize)>, String> {
     if only_if_clean && state.graph.lock().unwrap().dirty {
         return Ok(None);
     }

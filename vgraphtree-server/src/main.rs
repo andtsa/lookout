@@ -60,6 +60,11 @@ enum Command {
         /// Port to bind the server to.
         #[arg(long, default_value_t = 7777)]
         port: u16,
+        /// Address to bind to. Loopback by default: the server has no auth, so
+        /// exposing it on the network (--host 0.0.0.0) hands every visitor the
+        /// write endpoints. Put a reverse proxy in front instead.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
     },
     /// Validate the config: that it parses and every source link resolves.
     Check {
@@ -133,14 +138,14 @@ fn state_path_for(config_path: &str) -> String {
 #[tokio::main]
 async fn main() -> ExitCode {
     match Cli::parse().command {
-        Command::Serve { path, port } => serve(path, port).await,
+        Command::Serve { path, port, host } => serve(path, port, &host).await,
         Command::Check { path } => check::run_check(&path),
     }
 }
 
 // ─── serve ──────────────────────────────────────────────────────────────────
 
-async fn serve(config_path: String, port: u16) -> ExitCode {
+async fn serve(config_path: String, port: u16, host: &str) -> ExitCode {
     let state_path = state_path_for(&config_path);
 
     let (mut graph, project, warnings) = match compose(&config_path) {
@@ -208,7 +213,7 @@ async fn serve(config_path: String, port: u16) -> ExitCode {
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    let addr = format!("0.0.0.0:{port}");
+    let addr = format!("{host}:{port}");
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
@@ -216,7 +221,7 @@ async fn serve(config_path: String, port: u16) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("vgraphtree running at http://localhost:{port}");
+    println!("vgraphtree running at http://{host}:{port}");
     if let Err(e) = axum::serve(listener, app).await {
         eprintln!("error: server failed: {e}");
         return ExitCode::FAILURE;
