@@ -869,7 +869,9 @@ body.desc-inline .node-desc { display: inline; }
   border-radius: 4px;
   padding: 6px 9px;
   font: 12px/1.45 ui-monospace, monospace;
-  pointer-events: none;
+  /* Hoverable: the tip stays open while the pointer is over it (interaction.js),
+     so its text can be read at length or selected. */
+  user-select: text;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
   white-space: pre-wrap;
 }

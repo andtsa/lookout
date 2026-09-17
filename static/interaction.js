@@ -5,7 +5,7 @@
 
 import {
   nodes, edges, labelNodes, simulation, layoutEngine, nodeDescriptionMode, hoverTipDelay,
-  nodeLayer, edgeLayer, svg,
+  nodeLayer, edgeLayer, svg, zoom,
   scrollAccum, setHoveredNodeId, setSelectedEdgeId, setDirty, toggleFocusedNode,
 } from './state.js';
 import { updateDraggedLabels } from './layout-cola.js';
@@ -22,7 +22,13 @@ import { SCROLL_THRESHOLD, DRAG_THRESHOLD, FOCUS_REHEAT_ALPHA } from './constant
 // ─── Hover tooltip (node / edge descriptions) ─────────────────────────────────
 
 const hoverTip = document.getElementById('hover-tip');
-let _tipTimer = null;
+let _tipTimer  = null;   // pending show
+let _hideTimer = null;   // pending hide (grace period after the pointer leaves)
+let _tipOwner  = null;   // 'node:<id>' / 'edge:<id>' the tip is shown or pending for
+
+// How long a shown tip survives after the pointer leaves its node/edge — long
+// enough to cross the gap between the element and the popup.
+const TIP_HIDE_GRACE_MS = 300;
 
 function showTip(text, x, y) {
   hoverTip.textContent = text;
@@ -35,15 +41,41 @@ function showTip(text, x, y) {
 }
 
 // Arm the tooltip to appear only once the mouse has been still for hoverTipDelay.
-// Called on every mouseenter/mousemove, so any movement resets the timer (and
-// hides a shown tip), so the popup only surfaces when the pointer settles.
-function scheduleTip(text, x, y) {
+// Called on every mouseenter/mousemove, so movement before it appears resets the
+// timer. Once shown, it stays put while the pointer remains over its owner (or
+// the popup itself — see the listeners below); it only goes away via leaveTip.
+function scheduleTip(owner, text, x, y) {
+  clearTimeout(_hideTimer);
+  if (!text) { hideTip(); return; }
+  if (_tipOwner === owner && !hoverTip.hidden) return; // already showing for this element
+  hoverTip.hidden = true;
+  _tipOwner = owner;
   clearTimeout(_tipTimer);
-  if (!text) { hoverTip.hidden = true; return; }
-  hoverTip.hidden = true; // hide while moving; re-appears when still
   _tipTimer = setTimeout(() => showTip(text, x, y), hoverTipDelay);
 }
-function cancelTip() { clearTimeout(_tipTimer); _tipTimer = null; hoverTip.hidden = true; }
+
+// Pointer left the tip's owner (or the popup): drop a pending tip, and give a
+// shown one a grace period to be re-entered.
+function leaveTip() {
+  clearTimeout(_tipTimer);
+  if (hoverTip.hidden) { _tipOwner = null; return; }
+  clearTimeout(_hideTimer);
+  _hideTimer = setTimeout(hideTip, TIP_HIDE_GRACE_MS);
+}
+
+function hideTip() {
+  clearTimeout(_tipTimer);
+  clearTimeout(_hideTimer);
+  hoverTip.hidden = true;
+  _tipOwner = null;
+}
+
+hoverTip.addEventListener('mouseenter', () => clearTimeout(_hideTimer));
+hoverTip.addEventListener('mouseleave', leaveTip);
+// The popup sits over the canvas, so it would swallow wheel-zoom; get out of the way.
+hoverTip.addEventListener('wheel', hideTip, { passive: true });
+// Zooming or panning moves the owner out from under the popup.
+zoom.on('zoom.tip', hideTip);
 
 // ─── Drag ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +84,7 @@ let _dragOriginX = 0;     // pointer position at drag start (SVG coords)
 let _dragOriginY = 0;
 
 function dragStarted(event, d) {
+  hideTip();
   _dragMoved   = false;
   _dragOriginX = event.x;
   _dragOriginY = event.y;
@@ -272,6 +305,7 @@ const ctxMenu = document.getElementById('context-menu');
 let ctxNode = null;
 
 export function showContextMenu(event, d) {
+  hideTip();
   ctxNode = d;
   ctxMenu.style.left = `${event.clientX}px`;
   ctxMenu.style.top  = `${event.clientY}px`;
@@ -362,13 +396,13 @@ export function setupNodeInteractions(refreshFn, enterScopeFn) {
       d3.select(this)
         .classed('node-lod-target', false)
         .classed('node-leaf-hover', false);
-      cancelTip();
+      leaveTip();
     });
 
   // In 'hover' mode a node's description is shown only in the settle tooltip.
   function nodeTip(event, d) {
     if (nodeDescriptionMode === 'hover' && d.description)
-      scheduleTip(d.description, event.clientX, event.clientY);
+      scheduleTip(`node:${d.id}`, d.description, event.clientX, event.clientY);
   }
 
   // Alt+scroll over a node: per-node expand / collapse.
@@ -428,15 +462,15 @@ export function setupEdgeInteractions() {
   function onEnter(event, d) {
     visualFor(d.id).classed('edge-hover', true)
       .select('path.edge').attr('marker-end', 'url(#arrow-hover)');
-    scheduleTip(d.description, event.clientX, event.clientY);
+    scheduleTip(`edge:${d.id}`, d.description, event.clientX, event.clientY);
   }
   function onMove(event, d) {
-    scheduleTip(d.description, event.clientX, event.clientY);
+    scheduleTip(`edge:${d.id}`, d.description, event.clientX, event.clientY);
   }
   function onLeave(event, d) {
     visualFor(d.id).classed('edge-hover', false)
       .select('path.edge').attr('marker-end', 'url(#arrow)');
-    cancelTip();
+    leaveTip();
   }
 
   edgeLayer.selectAll('.edge-hitarea-group')
