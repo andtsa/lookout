@@ -826,14 +826,25 @@ select.cfg-input { cursor: pointer; }
 .node.symkind-type      .node-glyph-bg,
 .node.symkind-macro     .node-glyph-bg { fill: #fe8019; }  /* orange */
 
+/* Line-numbered code: a (number, line) grid so numbers stay level with
+   wrapped lines (see addLineNumbers in code-panel.js). */
+#code-panel code.code-numbered {   /* beats the hljs theme's `pre code.hljs { display: block }` */
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+.code-ln {
+  padding-right: 10px;
+  text-align: right;
+  color: var(--text-muted);
+  user-select: none;
+}
+.code-line { padding-right: 12px; }
+
 /* Highlighted line in the code panel — where a symbol node points. */
-.code-line-highlight {
-  position: absolute;
-  left: 0; right: 0;
-  background: var(--accent-muted);
-  border-left: 3px solid var(--accent);
-  pointer-events: none;
-  z-index: 0;
+.code-target { background: var(--accent-muted); }
+.code-ln.code-target {
+  color: var(--accent);
+  box-shadow: inset 3px 0 var(--accent);
 }
 
 /* ── Descriptions ────────────────────────────────────────────────────────────

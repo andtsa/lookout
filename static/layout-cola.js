@@ -25,14 +25,14 @@
 //   • We install a small controller shim as `simulation` so the rest of the app
 //     (drag reheat calls, the debug HUD) keeps working without branching.
 
-import { nodes, edges, labelNodes, nodeLayer, simulation, setSimulation, setGraphIsSparse } from './state.js';
+import { nodes, edges, labelNodes, nodeLayer, simulation, setSimulation } from './state.js';
 import { getViewportSize } from './geometry.js';
-import { isNodeVisible, isEdgeExposed } from './lod.js';
+import { isNodeVisible, isEdgeExposed, updateGraphSparsity } from './lod.js';
 import { rerenderEdges, updateContainers } from './render.js';
 import {
   COLA_NODE_PAD, COLA_LINK_LENGTH, COLA_LINK_LENGTH_JACCARD, COLA_FLOW_GAP, COLA_ITERS,
   COLA_LABEL_CHAR_W, COLA_LABEL_H, COLA_LABEL_PAD, COLA_LABEL_MID_BAND, COLA_LABEL_OFFSET,
-  COLA_RADIAL_SPAN, SPARSE_EDGE_RATIO, COLA_ANIM_MS_FULL, COLA_ANIM_MS_GENTLE,
+  COLA_RADIAL_SPAN, COLA_ANIM_MS_FULL, COLA_ANIM_MS_GENTLE,
 } from './constants.js';
 
 // In-flight layout tween (d3.timer). Cola solves synchronously to target
@@ -146,12 +146,9 @@ export function runColaLayout(alpha = 1, { mode = 'layered' } = {}) {
   const seed = alpha < 1;
   const flow = mode === 'layered' || mode === 'radial';
 
-  // Recompute the sparse flag (as buildSimulation does) — otherwise it stays at
-  // whatever the force engine last set, and a stale `true` silently forces every
-  // edge exposed, disabling focus mode. Must run before isEdgeExposed() below.
-  const visSemanticEdges = Object.values(edges)
-    .filter(e => idx.has(e.from) && idx.has(e.to)).length;
-  setGraphIsSparse(visSemanticEdges <= vis.length * SPARSE_EDGE_RATIO);
+  // Recompute the sparse flag — otherwise it stays at whatever the force engine
+  // last set. Must run before isEdgeExposed() below.
+  updateGraphSparsity();
 
   // Real nodes first (indices 0..vis.length-1 stay aligned with `vis`).
   const cNodes = vis.map(n => {

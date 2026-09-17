@@ -66,12 +66,15 @@ export function refreshVisibility(alpha = 1) {
   });
 
   updateContainers();
-  rerenderEdges();
   updateFocusHighlights();
   // Dispatch to the active layout engine. Both write positions to the shared
   // node objects, so the rest of the refresh is engine-agnostic.
   if (layoutEngine === 'cola') runColaLayout(alpha, { mode: colaMode });
   else buildSimulation(alpha);
+  // After the layout call: that's where graphIsSparse is recomputed, and edge
+  // opacity depends on it — redrawing first would paint one frame with the
+  // previous visibility's flag.
+  rerenderEdges();
   updateModeIndicator();
   updateEngineIndicator();
   updateLodIndicator(d3.zoomTransform(svg.node()).k);

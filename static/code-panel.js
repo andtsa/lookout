@@ -53,13 +53,52 @@ function renderFileInPanel(data, path, node) {
   codePanelContent.innerHTML = '';
   codePanelContent.appendChild(pre);
   if (window.hljs) hljs.highlightElement(code);
+  addLineNumbers(code);
 
   // Symbol node → scroll to and highlight the target line. `line` (1-based) is
   // authoritative; otherwise search the file for the symbol name.
   if (node && (node.line || node.symbol)) {
     const target = node.line || findSymbolLine(data.lines, node.symbol);
-    if (target) highlightLine(code, data.lines, target);
+    if (target) highlightLine(code, target);
   }
+}
+
+// ─── Line numbers ─────────────────────────────────────────────────────────────
+// Lines wrap (pre-wrap), so a separate number column would drift out of step.
+// Instead the code becomes a two-column grid — one (number, line) pair per
+// source line — so each number stays level with the first row of its line
+// however it wraps. Runs after hljs: its token spans can straddle newlines (block
+// comments, strings), so each line re-opens the spans that are still open.
+
+function addLineNumbers(code) {
+  const rows = [document.createElement('span')];
+  (function walk(el, chain) {
+    for (const child of [...el.childNodes]) {
+      if (child.nodeType === Node.ELEMENT_NODE) { walk(child, [...chain, child]); continue; }
+      if (child.nodeType !== Node.TEXT_NODE) continue;
+      child.textContent.split('\n').forEach((seg, i) => {
+        if (i > 0) rows.push(document.createElement('span'));
+        if (!seg) return;
+        let piece = document.createTextNode(seg);
+        for (let j = chain.length - 1; j >= 0; j--) {
+          const wrap = chain[j].cloneNode(false);
+          wrap.appendChild(piece);
+          piece = wrap;
+        }
+        rows[rows.length - 1].appendChild(piece);
+      });
+    }
+  })(code, []);
+
+  code.classList.add('code-numbered');
+  code.replaceChildren();
+  rows.forEach((row, i) => {
+    const ln = document.createElement('span');
+    ln.className   = 'code-ln';
+    ln.textContent = i + 1;
+    row.className  = 'code-line';
+    code.append(ln, row);
+  });
 }
 
 // ─── Symbol location within a file ─────────────────────────────────────────────
@@ -72,50 +111,16 @@ function findSymbolLine(lines, symbol) {
   return null;
 }
 
-// Char offset (into lines.join('\n')) of the start of a 1-based line.
-function lineStartOffset(lines, line) {
-  let off = 0;
-  for (let i = 0; i < line - 1; i++) off += lines[i].length + 1; // +1 for the '\n'
-  return off;
-}
+// Highlight a 1-based line (its number + code cells, see addLineNumbers) and
+// scroll it into view.
+function highlightLine(code, line) {
+  const ln = code.querySelectorAll('.code-ln')[line - 1];
+  if (!ln) return;
+  ln.classList.add('code-target');
+  ln.nextElementSibling.classList.add('code-target');
 
-// Locate (textNode, offset) for a character offset within a highlighted element.
-// hljs wraps text in spans but preserves textContent, so char offsets still align.
-function offsetToNode(root, charOffset) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let acc = 0, n;
-  while ((n = walker.nextNode())) {
-    const len = n.textContent.length;
-    if (acc + len >= charOffset) return { node: n, offset: charOffset - acc };
-    acc += len;
-  }
-  return null;
-}
-
-// Highlight a 1-based line and scroll it into view. Uses a DOM Range over the
-// line's text to get its real position — robust to line wrapping (pre-wrap) and
-// preserving hljs syntax highlighting.
-function highlightLine(code, lines, line) {
-  const startOff = lineStartOffset(lines, line);
-  const endOff   = startOff + (lines[line - 1] ? lines[line - 1].length : 0);
-  const s = offsetToNode(code, startOff);
-  const e = offsetToNode(code, endOff);
-  if (!s || !e) return;
-
-  const range = document.createRange();
-  range.setStart(s.node, s.offset);
-  range.setEnd(e.node, e.offset);
-  const rect     = range.getBoundingClientRect();
-  const contRect = codePanelContent.getBoundingClientRect();
-  const top      = rect.top - contRect.top + codePanelContent.scrollTop;
-
-  const bar = document.createElement('div');
-  bar.className    = 'code-line-highlight';
-  bar.style.top    = `${top}px`;
-  bar.style.height = `${Math.max(rect.height, 16)}px`;
-  codePanelContent.style.position = 'relative';
-  codePanelContent.appendChild(bar);
-
+  const top = ln.getBoundingClientRect().top
+    - codePanelContent.getBoundingClientRect().top + codePanelContent.scrollTop;
   codePanelContent.scrollTop = Math.max(0, top - codePanelContent.clientHeight * 0.35);
 }
 

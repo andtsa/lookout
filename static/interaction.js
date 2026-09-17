@@ -14,7 +14,6 @@ import {
   expandNode, collapseDeepestIn,
 } from './lod.js';
 import { updateContainers, rerenderEdges, resizeNodeBox } from './render.js';
-import { buildSimulation } from './simulation.js';
 import { getEdgeEndpoints } from './geometry.js';
 import { patchNode, patchEdge } from './api.js';
 import { openCodePanel, toggleCodePanel } from './code-panel.js';
@@ -254,8 +253,8 @@ export function selectEdge(edgeId) {
           vx: 0, vy: 0, _placed: !!pts,
         };
       }
-      rerenderEdges();
-      buildSimulation();
+      // Relayout through the active engine (a label node was added or removed).
+      if (_refreshFn) _refreshFn(FOCUS_REHEAT_ALPHA);
       setDirty(true);
       patchEdge(edgeId, { annotation: val || null });
       setSelectedEdgeId(null);

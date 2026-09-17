@@ -2,8 +2,8 @@
 // Pure state mutations — no render calls.  Callers are responsible for
 // calling refreshVisibility() (in app.js) after any mutation.
 
-import { nodes, edges, labelNodes, focusedNodeIds, graphIsSparse, scopeRootId } from './state.js';
-import { EXPAND_JITTER, LABEL_RADIUS_MIN, LABEL_RADIUS_PER_CHAR } from './constants.js';
+import { nodes, edges, labelNodes, focusedNodeIds, graphIsSparse, setGraphIsSparse, scopeRootId } from './state.js';
+import { EXPAND_JITTER, LABEL_RADIUS_MIN, LABEL_RADIUS_PER_CHAR, SPARSE_EDGE_RATIO } from './constants.js';
 
 // ─── Cycle safety ─────────────────────────────────────────────────────────────
 // Every walk below follows `parent` (or `children`) links until it runs out of
@@ -186,6 +186,25 @@ export function globalCollapse() {
 //     would be pointless, so show all; else every edge is faded — the intended
 //     resting state (declutters a dense graph).
 // Esc clears focus and returns to that resting state.
+
+// Whether an edge is drawn at all: both endpoints resolve to a visible proxy,
+// and not the same one (an edge internal to a collapsed node has nowhere to go).
+// Same test rerenderEdges uses to hide edges.
+export function isEdgeDrawn(edge) {
+  const fp = getVisibleProxy(edge.from), tp = getVisibleProxy(edge.to);
+  return !!(fp && tp && fp.id !== tp.id);
+}
+
+// Recompute graphIsSparse: sparse = drawn edges ≤ SPARSE_EDGE_RATIO × visible
+// nodes. Counts DRAWN edges — including those routed to a collapsed ancestor —
+// not just edges whose own endpoints are visible; otherwise a mostly-collapsed
+// map undercounts the lines on screen and flips to "show everything". Both
+// layout engines call this before reading isEdgeExposed.
+export function updateGraphSparsity() {
+  const visibleCount = Object.values(nodes).filter(isNodeVisible).length;
+  const drawnCount   = Object.values(edges).filter(isEdgeDrawn).length;
+  setGraphIsSparse(drawnCount <= visibleCount * SPARSE_EDGE_RATIO);
+}
 
 export function isEdgeExposed(edge) {
   if (focusedNodeIds.size > 0) {

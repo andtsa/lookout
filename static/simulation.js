@@ -2,11 +2,11 @@
 
 import {
   nodes, edges, labelNodes, simulation, setSimulation,
-  nodeLayer, svg, zoom, setGraphIsSparse, debugMode,
+  nodeLayer, svg, zoom, debugMode,
 } from './state.js';
 import { renderDebug } from './debug.js';
 import { getViewportSize, zoneToCoords, getEdgeEndpoints, containerCenter, containerRadius, nodeCollisionRadius } from './geometry.js';
-import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdgeExposed, layoutParent, MAX_ANCESTOR_WALK } from './lod.js';
+import { isNodeVisible, labelRadius, getVisibleProxy, visibleDescendants, isEdgeExposed, updateGraphSparsity, layoutParent, MAX_ANCESTOR_WALK } from './lod.js';
 import { updateContainers, rerenderEdges } from './render.js';
 import {
   CHARGE_LABEL_FACTOR, CHARGE_CONTAINER_PER_CHILD, CHARGE_CONTAINER_MIN,
@@ -15,7 +15,7 @@ import {
   LINK_STRENGTH_PARENT, LINK_STRENGTH_EDGE, LINK_STRENGTH_UNEXPOSED,
   COLLISION_ITERATIONS, VELOCITY_DECAY, COLLIDE_STRENGTH,
   CENTER_STRENGTH, LABEL_PULL_STRENGTH, LABEL_DECLUTTER_STRENGTH, ALPHA_DECAY,
-  ZONE_STRENGTH, PARENT_PIN_STRENGTH, CENTER_PAD, CENTER_FIT_MARGIN, SPARSE_EDGE_RATIO,
+  ZONE_STRENGTH, PARENT_PIN_STRENGTH, CENTER_PAD, CENTER_FIT_MARGIN,
 } from './constants.js';
 
 // ─── Label phantom nodes ──────────────────────────────────────────────────────
@@ -44,11 +44,7 @@ export function buildSimulation(alpha = 1) {
   const visIds   = new Set(simNodes.map(n => n.id));
 
   // Sparsity flag — feeds isEdgeExposed (rendering dim + weak-link decision below).
-  // Sparse = visible semantic edges ≤ SPARSE_EDGE_RATIO × visible nodes → all
-  // edges exposed, so focus is a no-op on sparse graphs.
-  const visSemanticEdgeCount = Object.values(edges)
-    .filter(e => visIds.has(e.from) && visIds.has(e.to)).length;
-  setGraphIsSparse(visSemanticEdgeCount <= simNodes.length * SPARSE_EDGE_RATIO);
+  updateGraphSparsity();
 
   // Semantic edges + weak parent→child links. Every visible edge is included, but
   // unexposed ones (focus active, neither endpoint focused) get a much weaker
